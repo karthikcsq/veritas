@@ -1,19 +1,156 @@
 "use client";
 
+import {
+  IDKitRequestWidget,
+  orbLegacy,
+  type IDKitResult,
+  type RpContext,
+} from "@worldcoin/idkit";
+import { useCallback, useRef, useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-// Mock — replace with GET /api/studies/:studyId/public
-const mockStudy = {
-  title: "Pain Management in Adults Over 50",
-  description:
-    "A survey study examining pain management strategies and their effectiveness in adults aged 50 and older. Your responses will help improve clinical treatment recommendations.",
-  compensationUsd: 25.0,
-  questionCount: 8,
-};
+interface PublicStudy {
+  id: string;
+  title: string;
+  description: string;
+  compensationUsd: number;
+  questionCount: number;
+  worldIdAction: string;
+}
+
+const DEFAULT_APP_ID = process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}` | undefined;
+
+async function getRpContext(action: string): Promise<{ rp_id: string } & RpContext> {
+  const res = await fetch("/api/world-id/rp-signature", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof err === "object" && err && "error" in err
+        ? String((err as { error: string }).error)
+        : "Failed to get RP signature",
+    );
+  }
+
+  const rpSig = await res.json();
+
+  return {
+    rp_id: rpSig.rp_id,
+    nonce: rpSig.nonce,
+    created_at: rpSig.created_at,
+    expires_at: rpSig.expires_at,
+    signature: rpSig.sig,
+  };
+}
 
 export default function StudyEnrollPage() {
+  const params = useParams<{ studyId: string }>();
+  const router = useRouter();
+  const studyId = params.studyId;
+
+  const [study, setStudy] = useState<PublicStudy | null>(null);
+  const [loadingStudy, setLoadingStudy] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [open, setOpen] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const rpContextRef = useRef<RpContext | null>(null);
+  const [rpContext, setRpContext] = useState<RpContext | null>(null);
+
+  const preset = orbLegacy();
+
+  useEffect(() => {
+    async function loadStudy() {
+      try {
+        const response = await fetch(`/api/studies/${studyId}/public`);
+        if (!response.ok) {
+          throw new Error("Failed to load study");
+        }
+
+        const payload = (await response.json()) as { study: PublicStudy };
+        setStudy(payload.study);
+      } catch (err) {
+        console.error(err);
+        setError("Could not load this study.");
+      } finally {
+        setLoadingStudy(false);
+      }
+    }
+
+    if (studyId) {
+      void loadStudy();
+    }
+  }, [studyId]);
+
+  const verifyOnBackend = useCallback(
+    async (result: IDKitResult) => {
+      const response = await fetch(`/api/studies/${studyId}/enroll`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          idkitResponse: result,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Backend verification failed");
+      }
+    },
+    [studyId],
+  );
+
+  const startVerification = async () => {
+    if (!study || !DEFAULT_APP_ID) return;
+
+    setStarting(true);
+    setError(null);
+
+    try {
+      const ctx = await getRpContext(study.worldIdAction);
+      rpContextRef.current = ctx;
+      setRpContext(ctx);
+      setOpen(true);
+    } catch (e) {
+      console.error(e);
+      rpContextRef.current = null;
+      setRpContext(null);
+      setError("Failed to start verification. Please try again.");
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      rpContextRef.current = null;
+      setRpContext(null);
+    }
+  };
+
+  if (loadingStudy) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 bg-muted/30">
+        <p className="text-sm text-muted-foreground">Loading study...</p>
+      </div>
+    );
+  }
+
+  if (!study) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 bg-muted/30">
+        <p className="text-sm text-destructive">{error ?? "Study not found."}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-muted/30">
       <Card className="w-full max-w-lg">
@@ -21,9 +158,9 @@ export default function StudyEnrollPage() {
           <div className="mx-auto h-10 w-10 rounded-lg bg-primary flex items-center justify-center mb-2">
             <span className="text-primary-foreground font-bold">V</span>
           </div>
-          <CardTitle className="text-2xl">{mockStudy.title}</CardTitle>
+          <CardTitle className="text-2xl">{study.title}</CardTitle>
           <CardDescription className="mt-2">
-            {mockStudy.description}
+            {study.description}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -31,13 +168,13 @@ export default function StudyEnrollPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-lg border p-4 text-center">
               <div className="text-2xl font-bold">
-                ${mockStudy.compensationUsd}
+                ${study.compensationUsd}
               </div>
               <div className="text-sm text-muted-foreground">Compensation</div>
             </div>
             <div className="rounded-lg border p-4 text-center">
               <div className="text-2xl font-bold">
-                {mockStudy.questionCount}
+                {study.questionCount}
               </div>
               <div className="text-sm text-muted-foreground">Questions</div>
             </div>
@@ -56,9 +193,33 @@ export default function StudyEnrollPage() {
           </div>
 
           {/* CTA */}
-          <Button size="lg" className="w-full">
-            Verify with World ID to Enroll
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={startVerification}
+            disabled={starting}
+          >
+            {starting ? "Preparing…" : "Verify with World ID to Enroll"}
           </Button>
+          {error ? (
+            <p className="text-sm text-center text-destructive">{error}</p>
+          ) : null}
+
+          {DEFAULT_APP_ID && rpContext && study ? (
+            <IDKitRequestWidget
+              open={open}
+              onOpenChange={onOpenChange}
+              app_id={DEFAULT_APP_ID}
+              action={study.worldIdAction}
+              rp_context={rpContext}
+              allow_legacy_proofs
+              preset={preset}
+              handleVerify={verifyOnBackend}
+              onSuccess={() => {
+                router.push(`/study/${studyId}/survey`);
+              }}
+            />
+          ) : null}
 
           <p className="text-xs text-center text-muted-foreground">
             By enrolling, you agree to answer all questions honestly. Your

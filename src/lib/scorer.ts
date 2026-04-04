@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { prisma } from "./prisma";
+import { pool, generateId } from "./db";
 
 function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -113,53 +113,70 @@ export async function triggerScoringPipeline(
   enrollmentId: string,
   responseIds: string[]
 ) {
-  const responses = await prisma.response.findMany({
-    where: { id: { in: responseIds } },
-    include: { question: true },
-  });
+  // Fetch responses with their question prompts
+  const responsesResult = await pool.query(
+    `SELECT r."id", r."value", r."timeSpentMs", q."prompt"
+    FROM "Response" r
+    JOIN "Question" q ON q."id" = r."questionId"
+    WHERE r."id" = ANY($1)`,
+    [responseIds]
+  );
+
+  const responses = responsesResult.rows;
 
   const allResponses = responses.map((r) => ({
-    question: r.question.prompt,
+    question: r.prompt,
     answer: r.value,
   }));
 
-  for (const response of responses) {
-    const score = await scoreResponse({
-      question: response.question.prompt,
-      answer: response.value,
-      timeSpentMs: response.timeSpentMs,
-      allResponsesInEnrollment: allResponses,
-    });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
 
-    await prisma.qualityScore.create({
-      data: {
-        responseId: response.id,
-        overallScore: score.overallScore,
-        coherenceScore: score.coherenceScore,
-        effortScore: score.effortScore,
-        consistencyScore: score.consistencyScore,
-        flagged: score.flagged,
-        flagReason: score.flagReason,
-      },
-    });
-  }
+    for (const response of responses) {
+      const score = await scoreResponse({
+        question: response.prompt,
+        answer: response.value,
+        timeSpentMs: response.timeSpentMs,
+        allResponsesInEnrollment: allResponses,
+      });
 
-  // Flag enrollment if average score is below threshold
-  const scores = await prisma.qualityScore.findMany({
-    where: { response: { enrollmentId } },
-  });
-  const avgScore =
-    scores.reduce((sum, s) => sum + s.overallScore, 0) / scores.length;
+      const scoreId = generateId();
+      await client.query(
+        'INSERT INTO "QualityScore" ("id", "responseId", "overallScore", "coherenceScore", "effortScore", "consistencyScore", "flagged", "flagReason", "scoredAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())',
+        [scoreId, response.id, score.overallScore, score.coherenceScore, score.effortScore, score.consistencyScore, score.flagged, score.flagReason]
+      );
+    }
 
-  if (avgScore < 0.5) {
-    await prisma.enrollment.update({
-      where: { id: enrollmentId },
-      data: { status: "FLAGGED" },
-    });
-  } else {
-    await prisma.enrollment.update({
-      where: { id: enrollmentId },
-      data: { status: "COMPLETED", completedAt: new Date() },
-    });
+    // Check average score to determine enrollment status
+    const scoresResult = await client.query(
+      `SELECT qs."overallScore"
+      FROM "QualityScore" qs
+      JOIN "Response" r ON r."id" = qs."responseId"
+      WHERE r."enrollmentId" = $1`,
+      [enrollmentId]
+    );
+    const allScores = scoresResult.rows;
+    const avgScore =
+      allScores.reduce((sum, s) => sum + parseFloat(s.overallScore), 0) / allScores.length;
+
+    if (avgScore < 0.5) {
+      await client.query(
+        'UPDATE "Enrollment" SET "status" = $1 WHERE "id" = $2',
+        ["FLAGGED", enrollmentId]
+      );
+    } else {
+      await client.query(
+        'UPDATE "Enrollment" SET "status" = $1, "completedAt" = NOW() WHERE "id" = $2',
+        ["COMPLETED", enrollmentId]
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
   }
 }
