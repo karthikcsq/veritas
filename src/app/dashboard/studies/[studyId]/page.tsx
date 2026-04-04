@@ -1,182 +1,181 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AlertTriangle,
+  CheckCircle,
+  Shield,
+  Star,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { OverviewTab } from "@/components/analytics/overview-tab";
+import { IntegrityTab } from "@/components/analytics/integrity-tab";
+import { LinguisticTab } from "@/components/analytics/linguistic-tab";
+import { GeographicTab } from "@/components/analytics/geographic-tab";
+import { BehaviorTab } from "@/components/analytics/behavior-tab";
+import { QuestionsTab } from "@/components/analytics/questions-tab";
 
-// Mock data — replace with API calls
-const mockEnrollments = [
-  { id: "e1", status: "COMPLETED", enrolledAt: "2024-01-15T10:30:00Z", avgScore: 0.91, flagged: false },
-  { id: "e2", status: "COMPLETED", enrolledAt: "2024-01-15T11:15:00Z", avgScore: 0.84, flagged: false },
-  { id: "e3", status: "FLAGGED", enrolledAt: "2024-01-15T12:00:00Z", avgScore: 0.32, flagged: true },
-  { id: "e4", status: "IN_PROGRESS", enrolledAt: "2024-01-15T14:00:00Z", avgScore: null, flagged: false },
-  { id: "e5", status: "COMPLETED", enrolledAt: "2024-01-16T09:00:00Z", avgScore: 0.77, flagged: false },
+const STATS = [
+  {
+    label: "Total Enrolled",
+    value: "12",
+    sub: "+2 today",
+    icon: Users,
+    gradient: "from-blue-500 to-cyan-500",
+  },
+  {
+    label: "Completed",
+    value: "8",
+    sub: "66.7% completion",
+    icon: CheckCircle,
+    gradient: "from-emerald-500 to-green-500",
+  },
+  {
+    label: "Flagged",
+    value: "3",
+    sub: "25% flag rate",
+    icon: AlertTriangle,
+    gradient: "from-rose-500 to-red-500",
+  },
+  {
+    label: "AI Detected",
+    value: "3",
+    sub: "All 3 overlapping flagged",
+    icon: Shield,
+    gradient: "from-orange-500 to-amber-500",
+  },
+  {
+    label: "Avg Quality",
+    value: "0.76",
+    sub: "+0.04 vs last week",
+    icon: Star,
+    gradient: "from-violet-500 to-purple-500",
+  },
 ];
-
-function scoreColor(score: number | null) {
-  if (score === null) return "text-muted-foreground";
-  if (score >= 0.7) return "text-green-600";
-  if (score >= 0.45) return "text-yellow-600";
-  return "text-destructive";
-}
 
 export default function StudyDetailPage() {
   return (
-    <div className="min-h-screen bg-muted/30">
-      {/* Top bar */}
-      <header className="border-b bg-background px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard">
-            <Button variant="ghost" size="sm">
-              &larr; Back
-            </Button>
-          </Link>
-          <div>
-            <h1 className="font-semibold">Pain Management in Adults Over 50</h1>
-            <div className="flex items-center gap-2 mt-0.5">
-              <Badge>ACTIVE</Badge>
-              <span className="text-sm text-muted-foreground">
-                47 / 200 enrolled
-              </span>
+    <div className="min-h-screen bg-slate-50">
+      {/* Sticky header */}
+      <header className="sticky top-0 z-50 border-b bg-white shadow-sm">
+        <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard">
+              <Button variant="ghost" size="sm">
+                ← Back
+              </Button>
+            </Link>
+            <div className="h-5 w-px bg-border" />
+            <div>
+              <h1 className="text-lg font-bold leading-tight">
+                Pain Management in Adults Over 50
+              </h1>
+              <div className="mt-0.5 flex items-center gap-2">
+                <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-200 hover:bg-emerald-500/20">
+                  ACTIVE
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  12 / 200 enrolled
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="flex items-center gap-1 text-sm text-emerald-600">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  Trending up
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            Close Study
-          </Button>
-          <Button size="sm">Share Link</Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm">
+              Export Report
+            </Button>
+            <Button variant="outline" size="sm">
+              Close Study
+            </Button>
+            <Button
+              size="sm"
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              Share Link
+            </Button>
+          </div>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* Stats cards */}
-        <div className="grid grid-cols-5 gap-4 mb-8">
-          {[
-            { label: "Enrolled", value: "47" },
-            { label: "Completed", value: "31" },
-            { label: "In Progress", value: "12" },
-            { label: "Flagged", value: "4" },
-            { label: "Avg Quality", value: "0.79" },
-          ].map((stat) => (
-            <Card key={stat.label}>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <div className="text-sm text-muted-foreground">
-                  {stat.label}
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        {/* Stat cards */}
+        <div className="mb-8 grid grid-cols-5 gap-4">
+          {STATS.map((s) => {
+            const Icon = s.icon;
+            return (
+              <div
+                key={s.label}
+                className="group relative overflow-hidden rounded-xl border bg-white p-5 transition-shadow hover:shadow-md"
+              >
+                <div
+                  className={`absolute inset-0 bg-gradient-to-br ${s.gradient} opacity-0 transition-opacity group-hover:opacity-5`}
+                />
+                <div
+                  className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${s.gradient}`}
+                >
+                  <Icon className="h-4 w-4 text-white" />
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+                <div className="text-2xl font-bold tabular-nums">{s.value}</div>
+                <div className="text-sm font-medium text-muted-foreground">
+                  {s.label}
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground/70">
+                  {s.sub}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="enrollments">
-          <TabsList>
-            <TabsTrigger value="enrollments">Enrollments</TabsTrigger>
-            <TabsTrigger value="questions">Questions</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="h-auto gap-1 border bg-white p-1">
+            <TabsTrigger value="overview" className="rounded-md px-4 py-2 text-sm">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="integrity" className="rounded-md px-4 py-2 text-sm">
+              Integrity
+            </TabsTrigger>
+            <TabsTrigger value="linguistic" className="rounded-md px-4 py-2 text-sm">
+              Linguistic
+            </TabsTrigger>
+            <TabsTrigger value="geographic" className="rounded-md px-4 py-2 text-sm">
+              Geographic
+            </TabsTrigger>
+            <TabsTrigger value="behavior" className="rounded-md px-4 py-2 text-sm">
+              Behavior
+            </TabsTrigger>
+            <TabsTrigger value="questions" className="rounded-md px-4 py-2 text-sm">
+              Questions
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="enrollments" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Participant Enrollments</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1">
-                  {/* Table header */}
-                  <div className="grid grid-cols-5 gap-4 px-4 py-2 text-sm font-medium text-muted-foreground">
-                    <div>ID</div>
-                    <div>Status</div>
-                    <div>Enrolled</div>
-                    <div>Quality Score</div>
-                    <div>Actions</div>
-                  </div>
-                  {/* Table rows */}
-                  {mockEnrollments.map((enrollment) => (
-                    <div
-                      key={enrollment.id}
-                      className="grid grid-cols-5 gap-4 px-4 py-3 rounded-md hover:bg-muted/50 text-sm items-center"
-                    >
-                      <div className="font-mono text-xs">
-                        {enrollment.id}
-                      </div>
-                      <div>
-                        <Badge
-                          variant={
-                            enrollment.status === "FLAGGED"
-                              ? "destructive"
-                              : enrollment.status === "COMPLETED"
-                              ? "default"
-                              : "secondary"
-                          }
-                        >
-                          {enrollment.status}
-                        </Badge>
-                      </div>
-                      <div className="text-muted-foreground">
-                        {new Date(enrollment.enrolledAt).toLocaleDateString()}
-                      </div>
-                      <div className={scoreColor(enrollment.avgScore)}>
-                        {enrollment.avgScore !== null
-                          ? enrollment.avgScore.toFixed(2)
-                          : "Pending"}
-                      </div>
-                      <div>
-                        <Button variant="ghost" size="sm">
-                          View
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+          <TabsContent value="overview">
+            <OverviewTab />
           </TabsContent>
-
-          <TabsContent value="questions" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Study Questions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {[
-                  { order: 1, type: "SCALE", prompt: "On a scale of 1-10, how would you rate your average daily pain level?" },
-                  { order: 2, type: "LONG_TEXT", prompt: "Describe how your pain affects your daily activities." },
-                  { order: 3, type: "MULTIPLE_CHOICE", prompt: "Which pain management methods have you tried?" },
-                  { order: 4, type: "LONG_TEXT", prompt: "Describe your experience with prescription pain medication." },
-                ].map((q) => (
-                  <div key={q.order} className="flex items-start gap-4 p-4 rounded-lg border">
-                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium shrink-0">
-                      {q.order}
-                    </div>
-                    <div>
-                      <div className="font-medium">{q.prompt}</div>
-                      <div className="text-sm text-muted-foreground mt-1">
-                        Type: {q.type.replace("_", " ")}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+          <TabsContent value="integrity">
+            <IntegrityTab />
           </TabsContent>
-
-          <TabsContent value="analytics" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Quality Analytics</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  Recharts visualizations will go here — quality distribution,
-                  score over time, flagged vs clean comparison
-                </div>
-              </CardContent>
-            </Card>
+          <TabsContent value="linguistic">
+            <LinguisticTab />
+          </TabsContent>
+          <TabsContent value="geographic">
+            <GeographicTab />
+          </TabsContent>
+          <TabsContent value="behavior">
+            <BehaviorTab />
+          </TabsContent>
+          <TabsContent value="questions">
+            <QuestionsTab />
           </TabsContent>
         </Tabs>
       </div>
