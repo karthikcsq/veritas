@@ -1,185 +1,212 @@
 "use client";
 
 import Link from "next/link";
+import {
+  AlertTriangle,
+  CheckCircle,
+  Download,
+  Share2,
+  Shield,
+  Star,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { OverviewTab } from "@/components/analytics/overview-tab";
+import { IntegrityTab } from "@/components/analytics/integrity-tab";
+import { LinguisticTab } from "@/components/analytics/linguistic-tab";
+import { GeographicTab } from "@/components/analytics/geographic-tab";
+import { BehaviorTab } from "@/components/analytics/behavior-tab";
+import { QuestionsTab } from "@/components/analytics/questions-tab";
 
-// Mock data — replace with API calls
-const mockEnrollments = [
-  { id: "e1", status: "COMPLETED", enrolledAt: "2024-01-15T10:30:00Z", avgScore: 0.91, flagged: false },
-  { id: "e2", status: "COMPLETED", enrolledAt: "2024-01-15T11:15:00Z", avgScore: 0.84, flagged: false },
-  { id: "e3", status: "FLAGGED", enrolledAt: "2024-01-15T12:00:00Z", avgScore: 0.32, flagged: true },
-  { id: "e4", status: "IN_PROGRESS", enrolledAt: "2024-01-15T14:00:00Z", avgScore: null, flagged: false },
-  { id: "e5", status: "COMPLETED", enrolledAt: "2024-01-16T09:00:00Z", avgScore: 0.77, flagged: false },
+const STATS = [
+  {
+    label: "Enrolled",
+    value: "12",
+    sub: "+2 today",
+    icon: Users,
+    color: "text-sky-300",
+    bg: "bg-sky-500/20",
+  },
+  {
+    label: "Completed",
+    value: "8",
+    sub: "66.7%",
+    icon: CheckCircle,
+    color: "text-emerald-300",
+    bg: "bg-emerald-500/20",
+  },
+  {
+    label: "Flagged",
+    value: "3",
+    sub: "25%",
+    icon: AlertTriangle,
+    color: "text-rose-300",
+    bg: "bg-rose-500/20",
+  },
+  {
+    label: "AI Detected",
+    value: "3",
+    sub: "of flagged",
+    icon: Shield,
+    color: "text-orange-300",
+    bg: "bg-orange-500/20",
+  },
+  {
+    label: "Avg Quality",
+    value: "0.76",
+    sub: "+0.04 this week",
+    icon: Star,
+    color: "text-violet-300",
+    bg: "bg-violet-500/20",
+  },
 ];
 
-function scoreColor(score: number | null) {
-  if (score === null) return "text-muted-foreground";
-  if (score >= 0.7) return "text-green-600";
-  if (score >= 0.45) return "text-yellow-600";
-  return "text-destructive";
-}
+const TABS = [
+  { value: "overview", label: "Overview" },
+  { value: "integrity", label: "Integrity" },
+  { value: "linguistic", label: "Linguistic" },
+  { value: "geographic", label: "Geographic" },
+  { value: "behavior", label: "Behavior" },
+  { value: "questions", label: "Questions" },
+];
 
 export default function StudyDetailPage() {
   return (
-    <div className="min-h-screen bg-muted/30">
-      {/* Top bar */}
-      <header className="border-b bg-background px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard">
-            <Button variant="ghost" size="sm">
-              &larr; Back
-            </Button>
-          </Link>
-          <div>
-            <h1 className="font-semibold">Pain Management in Adults Over 50</h1>
-            <div className="flex items-center gap-2 mt-0.5">
-              <Badge>ACTIVE</Badge>
-              <span className="text-sm text-muted-foreground">
-                47 / 200 enrolled
-              </span>
+    <div className="min-h-screen bg-slate-50">
+      <Tabs defaultValue="overview" className="flex-col">
+        {/* ── Sticky top nav block ─────────────────────────────────── */}
+        <div className="sticky top-0 z-50">
+          {/* Gradient header */}
+          <div className="bg-gradient-to-r from-slate-900 via-violet-950 to-slate-900">
+            <div className="mx-auto max-w-7xl px-6">
+              {/* Row 1: back + title + actions */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-center gap-4">
+                  <Link href="/dashboard">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-white/60 hover:text-white hover:bg-white/10"
+                    >
+                      ← Back
+                    </Button>
+                  </Link>
+                  <div className="h-5 w-px bg-white/15" />
+                  <div>
+                    <h1 className="text-xl font-bold text-white">
+                      Pain Management in Adults Over 50
+                    </h1>
+                    <div className="mt-0.5 flex items-center gap-2.5 text-sm">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        ACTIVE
+                      </span>
+                      <span className="text-white/50">12 / 200 enrolled</span>
+                      <span className="text-white/30">·</span>
+                      <span className="flex items-center gap-1 text-emerald-400">
+                        <TrendingUp className="h-3.5 w-3.5" />
+                        Trending up
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 border border-white/15 text-white/70 hover:text-white hover:bg-white/10"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Export
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gap-1.5 bg-violet-500 text-white hover:bg-violet-400"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    Share
+                  </Button>
+                </div>
+              </div>
+
+              {/* Row 2: inline stat pills */}
+              <div className="flex items-center gap-1 pb-4">
+                {STATS.map((s, i) => {
+                  const Icon = s.icon;
+                  return (
+                    <div key={s.label} className="flex items-center gap-1">
+                      {i > 0 && (
+                        <div className="mx-3 h-6 w-px bg-white/10" />
+                      )}
+                      <div
+                        className={`flex items-center gap-2 rounded-lg px-3 py-1.5 ${s.bg}`}
+                      >
+                        <Icon className={`h-4 w-4 ${s.color}`} />
+                        <span className="text-xl font-bold text-white tabular-nums">
+                          {s.value}
+                        </span>
+                        <div>
+                          <div className="text-xs font-medium text-white/80 leading-none">
+                            {s.label}
+                          </div>
+                          <div className="text-[10px] text-white/40 leading-none mt-0.5">
+                            {s.sub}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Tab bar */}
+          <div className="border-b bg-white shadow-sm">
+            <div className="mx-auto max-w-7xl px-6">
+              <TabsList
+                variant="line"
+                className="h-auto w-full justify-start rounded-none bg-transparent p-0 gap-0"
+              >
+                {TABS.map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="h-auto rounded-none border-b-2 border-transparent px-5 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-active:border-violet-600 data-active:text-violet-700"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            Close Study
-          </Button>
-          <Button size="sm">Share Link</Button>
+
+        {/* ── Scrollable content ────────────────────────────────────── */}
+        <div className="mx-auto max-w-7xl px-6 py-10">
+          <TabsContent value="overview">
+            <OverviewTab />
+          </TabsContent>
+          <TabsContent value="integrity">
+            <IntegrityTab />
+          </TabsContent>
+          <TabsContent value="linguistic">
+            <LinguisticTab />
+          </TabsContent>
+          <TabsContent value="geographic">
+            <GeographicTab />
+          </TabsContent>
+          <TabsContent value="behavior">
+            <BehaviorTab />
+          </TabsContent>
+          <TabsContent value="questions">
+            <QuestionsTab />
+          </TabsContent>
         </div>
-      </header>
-
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* Stats cards */}
-        <div className="grid grid-cols-5 gap-4 mb-8">
-          {[
-            { label: "Enrolled", value: "47" },
-            { label: "Completed", value: "31" },
-            { label: "In Progress", value: "12" },
-            { label: "Flagged", value: "4" },
-            { label: "Avg Quality", value: "0.79" },
-          ].map((stat) => (
-            <Card key={stat.label}>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <div className="text-sm text-muted-foreground">
-                  {stat.label}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Tabs */}
-        <Tabs defaultValue="enrollments">
-          <TabsList>
-            <TabsTrigger value="enrollments">Enrollments</TabsTrigger>
-            <TabsTrigger value="questions">Questions</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="enrollments" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Participant Enrollments</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1">
-                  {/* Table header */}
-                  <div className="grid grid-cols-5 gap-4 px-4 py-2 text-sm font-medium text-muted-foreground">
-                    <div>ID</div>
-                    <div>Status</div>
-                    <div>Enrolled</div>
-                    <div>Quality Score</div>
-                    <div>Actions</div>
-                  </div>
-                  {/* Table rows */}
-                  {mockEnrollments.map((enrollment) => (
-                    <div
-                      key={enrollment.id}
-                      className="grid grid-cols-5 gap-4 px-4 py-3 rounded-md hover:bg-muted/50 text-sm items-center"
-                    >
-                      <div className="font-mono text-xs">
-                        {enrollment.id}
-                      </div>
-                      <div>
-                        <Badge
-                          variant={
-                            enrollment.status === "FLAGGED"
-                              ? "destructive"
-                              : enrollment.status === "COMPLETED"
-                              ? "default"
-                              : "secondary"
-                          }
-                        >
-                          {enrollment.status}
-                        </Badge>
-                      </div>
-                      <div className="text-muted-foreground">
-                        {new Date(enrollment.enrolledAt).toLocaleDateString()}
-                      </div>
-                      <div className={scoreColor(enrollment.avgScore)}>
-                        {enrollment.avgScore !== null
-                          ? enrollment.avgScore.toFixed(2)
-                          : "Pending"}
-                      </div>
-                      <div>
-                        <Button variant="ghost" size="sm">
-                          View
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="questions" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Study Questions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {[
-                  { order: 1, type: "SCALE", prompt: "On a scale of 1-10, how would you rate your average daily pain level?" },
-                  { order: 2, type: "LONG_TEXT", prompt: "Describe how your pain affects your daily activities." },
-                  { order: 3, type: "MULTIPLE_CHOICE", prompt: "Which pain management methods have you tried?" },
-                  { order: 4, type: "LONG_TEXT", prompt: "Describe your experience with prescription pain medication." },
-                ].map((q) => (
-                  <div key={q.order} className="flex items-start gap-4 p-4 rounded-lg border">
-                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium shrink-0">
-                      {q.order}
-                    </div>
-                    <div>
-                      <div className="font-medium">{q.prompt}</div>
-                      <div className="text-sm text-muted-foreground mt-1">
-                        Type: {q.type.replace("_", " ")}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="analytics" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Quality Analytics</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  Recharts visualizations will go here — quality distribution,
-                  score over time, flagged vs clean comparison
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+      </Tabs>
     </div>
   );
 }
