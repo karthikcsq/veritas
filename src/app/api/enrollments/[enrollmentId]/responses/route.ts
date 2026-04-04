@@ -8,12 +8,13 @@ import type { SubmitResponsesRequest } from "@/types";
 // POST — participant submits responses (no auth, identified by enrollmentId)
 export async function POST(
   req: Request,
-  { params }: { params: { enrollmentId: string } }
+  { params }: { params: Promise<{ enrollmentId: string }> }
 ) {
+  const { enrollmentId } = await params;
   const body: SubmitResponsesRequest = await req.json();
 
   const enrollment = await prisma.enrollment.findUnique({
-    where: { id: params.enrollmentId },
+    where: { id: enrollmentId },
   });
   if (!enrollment) {
     return NextResponse.json(
@@ -27,7 +28,7 @@ export async function POST(
     body.responses.map((r) =>
       prisma.response.create({
         data: {
-          enrollmentId: params.enrollmentId,
+          enrollmentId: enrollmentId,
           questionId: r.questionId,
           value: r.value,
           timeSpentMs: r.timeSpentMs,
@@ -38,20 +39,20 @@ export async function POST(
 
   // Update enrollment status
   await prisma.enrollment.update({
-    where: { id: params.enrollmentId },
+    where: { id: enrollmentId },
     data: { status: "IN_PROGRESS" },
   });
 
   // Fire and forget — scoring runs in background
   triggerScoringPipeline(
-    params.enrollmentId,
+    enrollmentId,
     savedResponses.map((r) => r.id)
   ).catch(console.error);
 
   return NextResponse.json(
     {
       message: "Responses submitted. Quality scoring in progress.",
-      enrollmentId: params.enrollmentId,
+      enrollmentId: enrollmentId,
     },
     { status: 201 }
   );
@@ -60,15 +61,16 @@ export async function POST(
 // GET — researcher views responses with quality scores
 export async function GET(
   _req: Request,
-  { params }: { params: { enrollmentId: string } }
+  { params }: { params: Promise<{ enrollmentId: string }> }
 ) {
+  const { enrollmentId } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const responses = await prisma.response.findMany({
-    where: { enrollmentId: params.enrollmentId },
+    where: { enrollmentId: enrollmentId },
     include: {
       question: true,
       qualityScore: true,

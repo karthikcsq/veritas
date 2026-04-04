@@ -1,4 +1,4 @@
-import { StudyStatus, QuestionType, EnrollmentStatus } from "@prisma/client";
+import { StudyStatus, QuestionType, EnrollmentStatus } from "@/generated/prisma";
 
 // ---- Auth ----
 export interface RegisterRequest {

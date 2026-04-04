@@ -5,13 +5,14 @@ import type { EnrollRequest } from "@/types";
 
 export async function POST(
   req: Request,
-  { params }: { params: { studyId: string } }
+  { params }: { params: Promise<{ studyId: string }> }
 ) {
+  const { studyId } = await params;
   const body: EnrollRequest = await req.json();
   const { proof } = body;
 
   // 1. Verify the ZK proof with World ID cloud
-  const verifyResult = await verifyWorldIdProof(proof as any, params.studyId);
+  const verifyResult = await verifyWorldIdProof(proof as any, studyId);
   if (!verifyResult.success) {
     return NextResponse.json(
       { error: "World ID verification failed" },
@@ -31,7 +32,7 @@ export async function POST(
       where: {
         participantId_studyId: {
           participantId: existingParticipant.id,
-          studyId: params.studyId,
+          studyId: studyId,
         },
       },
     });
@@ -53,7 +54,7 @@ export async function POST(
   const enrollment = await prisma.enrollment.create({
     data: {
       participantId: participant.id,
-      studyId: params.studyId,
+      studyId: studyId,
       worldIdProof: proof as object,
       status: "VERIFIED",
     },

@@ -5,15 +5,16 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   _req: Request,
-  { params }: { params: { studyId: string } }
+  { params }: { params: Promise<{ studyId: string }> }
 ) {
+  const { studyId } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const enrollments = await prisma.enrollment.findMany({
-    where: { studyId: params.studyId },
+    where: { studyId },
     include: {
       responses: {
         include: { qualityScore: true },
