@@ -309,9 +309,23 @@ export default function NewStudyPage() {
     }
   }
 
+  function handleSpecificityDone(newAccepted: Set<number>) {
+    const remaining = specificityResult?.suggestions.filter(
+      (s) => !newAccepted.has(s.questionIndex)
+    );
+    if (remaining && remaining.length > 0) {
+      setTimeout(() => {
+        document.getElementById(`spec-${remaining[0].questionIndex}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    } else if (createdStudyId) {
+      runReverseAnalysis(createdStudyId);
+    }
+  }
+
   function acceptSpecificity(suggestion: NonNullable<typeof specificityResult>["suggestions"][number]) {
     if (!createdStudyId) return;
-    setAcceptedSpecificity((prev) => new Set(prev).add(suggestion.questionIndex));
+    const newAccepted = new Set(acceptedSpecificity).add(suggestion.questionIndex);
+    setAcceptedSpecificity(newAccepted);
 
     // Update the question in local state (prompt + optional type/config)
     const updated = [...questions];
@@ -331,50 +345,26 @@ export default function NewStudyPage() {
       setQuestions(updated);
     }
 
-    // Update the question in DB (prompt + optional type/config)
+    // Update the question in DB
     const body: Record<string, unknown> = {
       questionOrder: suggestion.questionIndex + 1,
       prompt: suggestion.suggestedPrompt,
     };
-    if (suggestion.suggestedType) {
-      body.type = suggestion.suggestedType;
-    }
-    if (suggestion.suggestedConfig) {
-      body.config = suggestion.suggestedConfig;
-    }
+    if (suggestion.suggestedType) body.type = suggestion.suggestedType;
+    if (suggestion.suggestedConfig) body.config = suggestion.suggestedConfig;
     fetch(`/api/studies/${createdStudyId}/update-question`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }).catch(console.error);
 
-    // Check if all specificity suggestions handled
-    const remaining = specificityResult?.suggestions.filter(
-      (s) => !acceptedSpecificity.has(s.questionIndex) && s.questionIndex !== suggestion.questionIndex
-    );
-    if (remaining && remaining.length > 0) {
-      setTimeout(() => {
-        document.getElementById(`spec-${remaining[0].questionIndex}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 100);
-    } else if (createdStudyId) {
-      // All specificity handled — run reverse analysis
-      runReverseAnalysis(createdStudyId);
-    }
+    handleSpecificityDone(newAccepted);
   }
 
   function dismissSpecificity(questionIndex: number) {
-    setAcceptedSpecificity((prev) => new Set(prev).add(questionIndex));
-
-    const remaining = specificityResult?.suggestions.filter(
-      (s) => !acceptedSpecificity.has(s.questionIndex) && s.questionIndex !== questionIndex
-    );
-    if (remaining && remaining.length > 0) {
-      setTimeout(() => {
-        document.getElementById(`spec-${remaining[0].questionIndex}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 100);
-    } else if (createdStudyId) {
-      runReverseAnalysis(createdStudyId);
-    }
+    const newAccepted = new Set(acceptedSpecificity).add(questionIndex);
+    setAcceptedSpecificity(newAccepted);
+    handleSpecificityDone(newAccepted);
   }
 
   return (

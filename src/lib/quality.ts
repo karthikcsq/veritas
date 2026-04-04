@@ -221,15 +221,21 @@ QUESTIONS:
 ${questionDescriptions}
 
 Rules:
-- ONLY return pairs where the reversal is clear and unambiguous
-- Do NOT pair questions that are merely related or correlated
-- Maximum ${MAX_REVERSE_PAIRS} pairs — pick the strongest reversals
-- A reverse pair means answering high on BOTH would be a contradiction
+- A reverse pair is when one question is POSITIVE and the other is NEGATIVE about the SAME construct
+- Both questions being negative (e.g., "pain interfered with work" and "avoided activities") is NOT a reverse pair — those are correlated, not reversed
+- One must imply good/positive and the other bad/negative. Answering high on BOTH must be logically impossible
+- Maximum ${MAX_REVERSE_PAIRS} pairs — pick the strongest, clearest reversals
+- If no true reversals exist, return an empty array. Do NOT force pairs.
 
-Examples of valid reversals:
-- "I feel tired" ↔ "I have energy for daily tasks"
-- "I feel sad" ↔ "I am able to enjoy life"
-- "Pain interferes with my work" ↔ "I can carry out work activities"
+Examples of VALID reversals (one positive, one negative):
+- "I feel tired" ↔ "I have energy for daily tasks" (tired=negative, energy=positive)
+- "I feel sad" ↔ "I am able to enjoy life" (sad=negative, enjoy=positive)
+- "Pain interferes with my work" ↔ "I can carry out work activities without difficulty" (interferes=negative, can carry out=positive)
+
+Examples of INVALID pairs (both same polarity — NOT reversals):
+- "Pain interfered with my work" ↔ "I avoided activities because of pain" — both negative, correlated
+- "I feel sad" ↔ "I feel hopeless" — both negative, correlated
+- "I have energy" ↔ "I am able to enjoy life" — both positive, correlated
 
 Respond ONLY with valid JSON:
 {
