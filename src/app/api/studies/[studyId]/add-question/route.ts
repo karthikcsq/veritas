@@ -15,7 +15,6 @@ export async function POST(
   const { studyId } = await params;
   const researcherId = (session.user as { id: string }).id;
 
-  // Verify ownership
   const studyResult = await pool.query(
     'SELECT "id" FROM "Study" WHERE "id" = $1 AND "researcherId" = $2',
     [studyId, researcherId]
@@ -25,22 +24,42 @@ export async function POST(
   }
 
   const body = await req.json();
-  const questionId = generateId();
+  const insertOrder = body.order ?? 999;
 
-  await pool.query(
-    'INSERT INTO "Question" ("id", "studyId", "order", "type", "prompt", "options", "required", "config", "dependsOn") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-    [
-      questionId,
-      studyId,
-      body.order ?? 999,
-      body.type ?? "SCALE",
-      body.prompt,
-      body.options ? JSON.stringify(body.options) : null,
-      body.required !== false,
-      body.config ? JSON.stringify(body.config) : null,
-      null,
-    ]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
 
-  return NextResponse.json({ questionId }, { status: 201 });
+    // If insertAndShift, bump existing questions at or after this order
+    if (body.insertAndShift) {
+      await client.query(
+        'UPDATE "Question" SET "order" = "order" + 1 WHERE "studyId" = $1 AND "order" >= $2',
+        [studyId, insertOrder]
+      );
+    }
+
+    const questionId = generateId();
+    await client.query(
+      'INSERT INTO "Question" ("id", "studyId", "order", "type", "prompt", "options", "required", "config", "dependsOn") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [
+        questionId,
+        studyId,
+        insertOrder,
+        body.type ?? "SCALE",
+        body.prompt,
+        body.options ? JSON.stringify(body.options) : null,
+        body.required !== false,
+        body.config ? JSON.stringify(body.config) : null,
+        null,
+      ]
+    );
+
+    await client.query("COMMIT");
+    return NextResponse.json({ questionId }, { status: 201 });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }

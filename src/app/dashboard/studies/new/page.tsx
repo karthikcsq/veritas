@@ -109,18 +109,45 @@ export default function NewStudyPage() {
     if (!createdStudyId) return;
     setAcceptedRecs((prev) => new Set(prev).add(rec.originalPrompt));
 
-    // Add the reverse question to the study via API
+    // Find the original question to copy its type and config (reverse should match original)
+    const originalQ = questions.find((q) => q.prompt === rec.originalPrompt);
+    const type = originalQ?.type ?? rec.reverseType ?? "SCALE";
+    const config = originalQ?.scaleConfig
+      ? { scale: originalQ.scaleConfig }
+      : rec.reverseConfig;
+
+    // Insert the reverse question and shift existing orders
     fetch(`/api/studies/${createdStudyId}/add-question`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        type: rec.reverseType || "SCALE",
+        type,
         prompt: rec.reversePrompt,
         order: rec.suggestedOrder,
         required: true,
-        config: rec.reverseConfig,
+        config,
+        insertAndShift: true,
       }),
     }).catch(console.error);
+
+    // Also add to local state
+    const newQ: QuestionDraft = {
+      order: rec.suggestedOrder,
+      type,
+      prompt: rec.reversePrompt,
+      required: true,
+      scaleConfig: originalQ?.scaleConfig,
+    };
+    const updated = [...questions];
+    // Shift orders of questions at or after the insert point
+    for (let j = 0; j < updated.length; j++) {
+      if (updated[j].order >= rec.suggestedOrder) {
+        updated[j] = { ...updated[j], order: updated[j].order + 1 };
+      }
+    }
+    updated.push(newQ);
+    updated.sort((a, b) => a.order - b.order);
+    setQuestions(updated);
   }
 
   function dismissRecommendation(originalPrompt: string) {

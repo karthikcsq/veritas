@@ -462,7 +462,7 @@ export async function recommendReverseQuestions(
     .join("\n");
 
   const completion = await getOpenAI().chat.completions.create({
-    model: "gpt-5.4-mini",
+    model: "gpt-5.4",
     messages: [
       {
         role: "user",
@@ -473,18 +473,30 @@ ${questionDescriptions}
 
 Do two things:
 
-1. COUNT how many existing question pairs are natural reverse-scored pairs — where one question is the conceptual opposite of another (e.g. "I feel sad" and "I am able to enjoy life" are reverses measuring mood). Only count CLEAR, UNAMBIGUOUS reversals.
+1. COUNT how many existing question pairs are natural reverse-scored pairs — one POSITIVE and one NEGATIVE about the same construct. Both being negative is NOT a reverse pair.
 
-2. IF the survey has fewer than 2 natural reverse pairs, SUGGEST new reverse-scored questions to add (up to a total of 2 pairs). If it already has 2+, suggest nothing.
+2. IF the survey has fewer than 2 natural reverse pairs, SUGGEST new reverse-scored questions (up to 2 total). If already 2+, suggest nothing.
 
-A reverse-scored question measures the SAME construct as an existing question but with OPPOSITE meaning. Good candidates are subjective feelings/states.
+CRITICAL RULES for reverse question wording:
+- The reverse MUST make grammatical and logical sense as a standalone question
+- The reverse must measure the POSITIVE version of the original's NEGATIVE construct (or vice versa)
+- Do NOT just negate the original — reframe it as a natural, sensible question
 
-CRITICAL STYLE RULES for generated reverse questions:
-- Match the sentence structure and tone of the original question exactly
-- If the original starts with "I have been...", the reverse should too
-- If the original uses casual language, don't make the reverse formal
-- The reverse should look like it belongs in the same survey — a participant should not be able to tell it was auto-generated
-- Use the same scale range (min/max) and label style as the original
+BAD reverse examples (DO NOT generate these):
+- Original: "How much has pain made you feel irritable?" → BAD: "How much has pain made you feel calm?" (pain doesn't make you feel calm — this is nonsensical)
+- Original: "I have been experiencing pain" → BAD: "I have been free of pain" (too simple, not natural)
+
+GOOD reverse examples:
+- Original: "Over the past month, how often has pain made you feel irritable?" → GOOD: "Over the past month, how often have you felt calm and relaxed?" (measures same emotional dimension but positive)
+- Original: "Over the past month, I have been experiencing pain" → GOOD: "Over the past month, how comfortable have you been physically?" (measures same physical construct positively)
+- Original: "Pain has interfered with my work" → GOOD: "I have been able to carry out my work effectively" (same work-impact construct, positive framing)
+- Original: "I have had difficulty sleeping due to pain" → GOOD: "I have been sleeping well and feeling rested" (same sleep construct, positive)
+
+The reverse question MUST:
+- Use the SAME scale type (if original is 0-4 frequency, reverse is 0-4 frequency)
+- NOT reference the negative construct in the positive question (don't say "pain made you calm")
+- Read naturally — a participant should not find it odd
+- Do NOT include reverseConfig or reverseType — the system will copy these from the original
 
 Respond ONLY with valid JSON:
 {
@@ -497,9 +509,6 @@ Respond ONLY with valid JSON:
       "originalQuestionId": "Q5",
       "originalPrompt": "the original question text",
       "reversePrompt": "your reverse-scored question",
-      "reverseType": "SCALE or MULTIPLE_CHOICE",
-      "reverseOptions": null,
-      "reverseConfig": null or {"scale": {"min": 0, "max": 4, "minLabel": "...", "maxLabel": "..."}},
       "explanation": "One sentence on what construct this checks"
     }
   ]
