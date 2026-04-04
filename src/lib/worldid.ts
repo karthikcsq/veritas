@@ -1,31 +1,67 @@
-// TODO: Wire up real World ID verification
-// See: https://docs.worldcoin.org/reference/api
+import { signRequest } from "@worldcoin/idkit/signing";
 
-export interface WorldIdProof {
-  merkle_root: string;
-  nullifier_hash: string;
-  proof: string;
-  verification_level: string;
+interface WorldIdConfig {
+  appId: string;
+  rpId: string;
+  signingKey: string;
 }
 
-export interface VerifyResult {
-  success: boolean;
+export interface RpSignature {
+  sig: string;
+  nonce: string;
+  created_at: number;
+  expires_at: number;
 }
 
-export async function verifyWorldIdProof(
-  proof: WorldIdProof,
-  studyId: string
-): Promise<VerifyResult> {
-  // TODO: Replace with actual World ID cloud verification
-  // const res = await fetch(`https://developer.worldcoin.org/api/v1/verify/${process.env.NEXT_PUBLIC_WLD_APP_ID}`, {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   body: JSON.stringify({
-  //     ...proof,
-  //     action: `study_enrollment_${studyId}`,
-  //   }),
-  // });
-  // return res.json();
+function getWorldIdConfig(): WorldIdConfig {
+  const appId = process.env.WORLD_APP_ID;
+  const rpId = process.env.WORLD_RP_ID;
+  const signingKey = process.env.RP_SIGNING_KEY;
 
-  return { success: true };
+  if (!appId || !rpId || !signingKey) {
+    throw new Error("WORLD_APP_ID, WORLD_RP_ID, and RP_SIGNING_KEY must be set");
+  }
+
+  return { appId, rpId, signingKey };
+}
+
+export function getWorldIdPublicConfig() {
+  const { appId, rpId } = getWorldIdConfig();
+  return { appId, rpId };
+}
+
+export function generateRpSignature(action: string): RpSignature {
+  const { signingKey } = getWorldIdConfig();
+  const { sig, nonce, createdAt, expiresAt } = signRequest({
+    signingKeyHex: signingKey,
+    action,
+  });
+
+  return {
+    sig,
+    nonce,
+    created_at: createdAt,
+    expires_at: expiresAt,
+  };
+}
+
+export async function verifyIdKitPayload(payload: unknown): Promise<Response> {
+  const { rpId } = getWorldIdConfig();
+  return fetch(`https://developer.world.org/api/v4/verify/${rpId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+type IdKitResponseWithNullifier = {
+  responses?: Array<{
+    nullifier?: string;
+  }>;
+};
+
+export function extractNullifierFromIdKitPayload(payload: unknown): string | null {
+  const typedPayload = payload as IdKitResponseWithNullifier;
+  const nullifier = typedPayload?.responses?.[0]?.nullifier;
+  return typeof nullifier === "string" && nullifier.length > 0 ? nullifier : null;
 }

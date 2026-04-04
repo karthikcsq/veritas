@@ -69,12 +69,7 @@ export interface StudyDetail {
 
 // ---- Enrollment ----
 export interface EnrollRequest {
-  proof: {
-    merkle_root: string;
-    nullifier_hash: string;
-    proof: string;
-    verification_level: string;
-  };
+  idkitResponse: unknown;
 }
 
 // ---- Responses ----

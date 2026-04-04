@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { verifyWorldIdProof } from "@/lib/worldid";
 import { prisma } from "@/lib/prisma";
 import type { EnrollRequest } from "@/types";
+import {
+  extractNullifierFromIdKitPayload,
+  verifyIdKitPayload,
+} from "@/lib/worldid";
 
 export async function POST(
   req: Request,
@@ -9,18 +12,43 @@ export async function POST(
 ) {
   const { studyId } = await params;
   const body: EnrollRequest = await req.json();
-  const { proof } = body;
+  const { idkitResponse } = body;
+  const expectedAction = `study_enrollment_${studyId}`;
+  const payloadAction =
+    typeof idkitResponse === "object" &&
+    idkitResponse !== null &&
+    "action" in idkitResponse &&
+    typeof (idkitResponse as { action?: unknown }).action === "string"
+      ? (idkitResponse as { action: string }).action
+      : null;
 
-  // 1. Verify the ZK proof with World ID cloud
-  const verifyResult = await verifyWorldIdProof(proof as any, studyId);
-  if (!verifyResult.success) {
+  if (payloadAction !== expectedAction) {
     return NextResponse.json(
-      { error: "World ID verification failed" },
+      { error: "Invalid IDKit payload: unexpected action" },
       { status: 400 }
     );
   }
 
-  const nullifierHash = proof.nullifier_hash;
+  // 1. Verify the IDKit response with World ID Developer Portal.
+  const verifyResponse = await verifyIdKitPayload(idkitResponse);
+  if (!verifyResponse.ok) {
+    const verifyError = await verifyResponse.text();
+    return NextResponse.json(
+      {
+        error: "World ID verification failed",
+        details: verifyError,
+      },
+      { status: 400 }
+    );
+  }
+
+  const nullifierHash = extractNullifierFromIdKitPayload(idkitResponse);
+  if (!nullifierHash) {
+    return NextResponse.json(
+      { error: "Invalid IDKit payload: missing nullifier" },
+      { status: 400 }
+    );
+  }
 
   // 2. Check if this nullifier has already enrolled in this study
   const existingParticipant = await prisma.participant.findUnique({
@@ -55,7 +83,7 @@ export async function POST(
     data: {
       participantId: participant.id,
       studyId: studyId,
-      worldIdProof: proof as object,
+      worldIdProof: idkitResponse as object,
       status: "VERIFIED",
     },
   });
