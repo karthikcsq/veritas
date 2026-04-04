@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { pool, generateId } from "./db";
+import { analyzeSimilarity } from "./similarity";
 import { analyzeStructuredQuality } from "./quality";
 import type { QuestionType } from "@/types";
 
@@ -140,11 +141,11 @@ ANSWER:
 ${answer}
 
 Score the answer's VALIDITY from 0 to 100:
-- 0–15: Completely off-topic. The answer has nothing to do with the question (e.g. random text, copy-paste spam, answering a totally different question).
-- 16–35: Barely related. Mentions a vaguely related topic but clearly doesn't attempt to answer what was asked.
-- 36–55: Loosely valid. Touches on the topic but misses the core of the question.
-- 56–80: Reasonably valid. A genuine attempt to answer, even if brief or informal.
-- 81–100: Clearly valid. Directly addresses what the question asked.
+- 0-20: Completely irrelevant. The answer has nothing to do with the question (e.g. random words, copy-paste from elsewhere, answering a totally different question).
+- 21-40: Marginally related. Mentions a related topic but does not answer what was asked.
+- 41-60: Partially valid. Addresses part of the question but misses key aspects or is vague.
+- 61-80: Mostly valid. Clearly responds to the question with minor gaps.
+- 81-100: Fully valid. Directly and clearly addresses what the question asked.
 
 Be lenient with casual, short, or informal answers — as long as the person is genuinely trying to respond to the question, score generously. Do NOT judge grammar, spelling, depth, or effort — only whether the answer is on-topic.
 
@@ -226,11 +227,11 @@ PARTICIPANT'S RESPONSES:
 ${formatted}
 
 Score the overall CONTRADICTION level from 0 to 100:
-- 0–10: No contradictions. All answers are consistent with each other.
-- 11–30: Minor inconsistencies. Small discrepancies that could be explained by imprecise wording.
-- 31–60: Moderate contradictions. Some answers conflict in ways that raise questions about accuracy.
-- 61–80: Significant contradictions. Multiple answers directly conflict with each other.
-- 81–100: Extreme contradictions. Answers are fundamentally incompatible, suggesting careless or fabricated responses.
+- 0-10: No contradictions. All answers are consistent with each other.
+- 11-30: Minor inconsistencies. Small discrepancies that could be explained by imprecise wording.
+- 31-60: Moderate contradictions. Some answers conflict in ways that raise questions about accuracy.
+- 61-80: Significant contradictions. Multiple answers directly conflict with each other.
+- 81-100: Extreme contradictions. Answers are fundamentally incompatible, suggesting careless or fabricated responses.
 
 Look for:
 - Factual contradictions (e.g. "I've never taken medication" vs "I take ibuprofen daily")
@@ -295,15 +296,55 @@ export async function checkContradictions(
   };
 }
 
+async function checkQuestionSimilarityThreshold(
+  enrollmentId: string,
+  client: any
+): Promise<boolean> {
+  // Get all questions answered by this enrollment with their similarity scores
+  const questionsResult = await client.query(
+    `SELECT DISTINCT r."questionId", qs."similarityScore"
+     FROM "Response" r
+     LEFT JOIN "QualityScore" qs ON qs."responseId" = r."id"
+     WHERE r."enrollmentId" = $1`,
+    [enrollmentId]
+  );
+
+  const questions = questionsResult.rows;
+  if (questions.length === 0) return true;
+
+  // Count how many questions have similarity >= 0.9
+  const questionsWithHighSimilarity = questions.filter((q: any) =>
+    q.similarityScore !== null && q.similarityScore >= 0.9
+  ).length;
+
+  const percentageHighSimilarity = questionsWithHighSimilarity / questions.length;
+
+  console.log(
+    `[similarity-threshold] ${questionsWithHighSimilarity}/${questions.length} questions (${(percentageHighSimilarity * 100).toFixed(1)}%) have >= 90% similarity`
+  );
+
+  // Flag if 70% or more questions have 90%+ similarity
+  if (percentageHighSimilarity >= 0.7) {
+    console.log(
+      `[similarity-threshold] Enrollment ${enrollmentId}: flagged (${(percentageHighSimilarity * 100).toFixed(1)}% >= 70%)`
+    );
+    return false;
+  }
+
+  return true; // Enrollment passed similarity threshold
+}
+
 export async function triggerScoringPipeline(
   enrollmentId: string,
   responseIds: string[]
 ) {
   const responsesResult = await pool.query(
-    `SELECT r."id", r."value", r."timeSpentMs", q."prompt"
-    FROM "Response" r
-    JOIN "Question" q ON q."id" = r."questionId"
-    WHERE r."id" = ANY($1)`,
+    `SELECT r."id", r."value", r."timeSpentMs", r."questionId",
+            q."prompt", q."type", e."studyId"
+     FROM "Response" r
+     JOIN "Question" q  ON q."id" = r."questionId"
+     JOIN "Enrollment" e ON e."id" = r."enrollmentId"
+     WHERE r."id" = ANY($1)`,
     [responseIds]
   );
 
@@ -319,6 +360,7 @@ export async function triggerScoringPipeline(
     await client.query("BEGIN");
 
     for (const response of responses) {
+      // ── 1. Quality scoring ─────────────────────────────────────────
       const score = await scoreResponse({
         question: response.prompt,
         answer: response.value,
@@ -326,25 +368,63 @@ export async function triggerScoringPipeline(
         allResponsesInEnrollment: allResponses,
       });
 
+      // ── 2. RAG similarity analysis (free-response only) ───────────
+      // Only meaningful for open-ended text; skip MCQ and scale questions.
+      // Runs outside the DB transaction so a Pinecone failure doesn't
+      // roll back the quality scores.
+      let simScore: number | null = null;
+      let simReason: string | null = null;
+      const isFreeResponse = response.type === "SHORT_TEXT" || response.type === "LONG_TEXT";
+      if (isFreeResponse) try {
+        const sim = await analyzeSimilarity({
+          responseId: response.id,
+          questionId: response.questionId,
+          enrollmentId,
+          studyId: response.studyId,
+          questionPrompt: response.prompt,
+          responseText: response.value,
+        });
+        if (sim) {
+          simScore = sim.similarityScore;
+          simReason = sim.similarityReason;
+        }
+      } catch (err) {
+        console.error("[similarity] pipeline error (non-fatal):", err);
+      }
+
+      // ── 3. Persist both scores ─────────────────────────────────────
       const scoreId = generateId();
       await client.query(
-        'INSERT INTO "QualityScore" ("id", "responseId", "overallScore", "coherenceScore", "effortScore", "consistencyScore", "flagged", "flagReason", "scoredAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())',
-        [scoreId, response.id, score.overallScore, score.coherenceScore, score.effortScore, score.consistencyScore, score.flagged, score.flagReason]
+        `INSERT INTO "QualityScore"
+           ("id", "responseId", "overallScore", "coherenceScore", "effortScore",
+            "consistencyScore", "similarityScore", "flagged", "flagReason",
+            "similarityReason", "scoredAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, NOW())`,
+        [
+          scoreId,
+          response.id,
+          score.overallScore,
+          score.coherenceScore,
+          score.effortScore,
+          score.consistencyScore,
+          simScore,
+          score.flagged,
+          score.flagReason,
+          simReason,
+        ]
       );
     }
 
-    // Run structured quality analysis (response time + reverse-score checks)
+    // ── 4. Structured quality analysis (response time + reverse-score checks) ──
     let structuredScore = 1.0;
-    let structuredFlagReasons: string[] = [];
     try {
       const structuredResult = await analyzeStructuredQuality(enrollmentId);
       structuredScore = structuredResult.overallStructuredScore;
-      structuredFlagReasons = structuredResult.flagReasons;
     } catch (err) {
       console.error("Structured quality analysis failed (non-fatal):", err);
     }
 
-    // Check average LLM score for text responses
+    // ── 5. Compute combined score and determine enrollment status ──────
     const scoresResult = await client.query(
       `SELECT qs."overallScore"
       FROM "QualityScore" qs
@@ -357,13 +437,17 @@ export async function triggerScoringPipeline(
       ? allScores.reduce((sum, s) => sum + parseFloat(s.overallScore), 0) / allScores.length
       : 1.0;
 
-    // Combined score: LLM scoring for text + structured analysis for all types
     const hasTextScores = allScores.length > 0;
     const combinedScore = hasTextScores
       ? avgLlmScore * 0.5 + structuredScore * 0.5
       : structuredScore;
 
-    if (combinedScore < 0.5) {
+    const similarityThresholdPassed = await checkQuestionSimilarityThreshold(
+      enrollmentId,
+      client
+    );
+
+    if (combinedScore < 0.5 || !similarityThresholdPassed) {
       await client.query(
         'UPDATE "Enrollment" SET "status" = $1 WHERE "id" = $2',
         ["FLAGGED", enrollmentId]

@@ -1,17 +1,17 @@
 "use client";
 
-import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
 import {
   AlertTriangle,
   CheckCircle,
   Copy,
-  Download,
   Eye,
   EyeOff,
-  Share2,
+  Shield,
   Star,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,53 @@ import { LinguisticTab } from "@/components/analytics/linguistic-tab";
 import { GeographicTab } from "@/components/analytics/geographic-tab";
 import { BehaviorTab } from "@/components/analytics/behavior-tab";
 import { QuestionsTab } from "@/components/analytics/questions-tab";
-import type { StudyDetail, AnalyticsData } from "@/types";
+
+export type AnalyticsData = {
+  study: { id: string; title: string; status: string; targetCount: number };
+  stats: {
+    totalEnrollments: number;
+    completed: number;
+    inProgress: number;
+    flagged: number;
+    averageQualityScore: number;
+    averageSimilarityScore: number | null;
+    qualityDistribution: { high: number; medium: number; low: number };
+  };
+  enrollmentTrend: { date: string; enrolled: number; completed: number; flagged: number }[];
+  dimensionScores: { coherence: number; effort: number; consistency: number; similarity: number | null };
+  enrollments: {
+    id: string;
+    status: string;
+    overallScore: number | null;
+    coherenceScore: number | null;
+    effortScore: number | null;
+    consistencyScore: number | null;
+    similarityScore: number | null;
+    flagged: boolean;
+    flagReason: string | null;
+    similarityReason: string | null;
+    responses: {
+      questionId: string;
+      questionPrompt: string;
+      questionType: string;
+      value: string;
+      timeSpentMs: number | null;
+      wordCount: number;
+    }[];
+  }[];
+  questionStats: {
+    questionId: string;
+    order: number;
+    type: string;
+    prompt: string;
+    options: string[] | null;
+    responseCount: number;
+    totalEnrollments: number;
+    avgTimeSec: number | null;
+    avgQuality: number | null;
+    avgSimilarity: number | null;
+  }[];
+};
 
 const TABS = [
   { value: "overview", label: "Overview" },
@@ -43,30 +89,21 @@ const statusColors: Record<string, { border: string; bg: string; text: string; d
 
 export default function StudyDetailPage() {
   const { studyId } = useParams<{ studyId: string }>();
-  const [study, setStudy] = useState<StudyDetail | null>(null);
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<AnalyticsData | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [studyRes, analyticsRes] = await Promise.all([
-          fetch(`/api/studies/${studyId}`),
-          fetch(`/api/studies/${studyId}/analytics`),
-        ]);
-        if (studyRes.ok) {
-          const data = await studyRes.json();
-          setStudy(data.study);
+    if (!studyId) return;
+    fetch(`/api/studies/${studyId}/analytics`)
+      .then((r) => r.json())
+      .then((result) => {
+        if (result.error) {
+          console.error("Analytics API error:", result.error);
+        } else {
+          setData(result);
         }
-        if (analyticsRes.ok) {
-          setAnalytics(await analyticsRes.json());
-        }
-      } finally {
-        setLoading(false);
-      }
-    }
-    if (studyId) load();
+      })
+      .catch(console.error);
   }, [studyId]);
 
   async function toggleStatus(newStatus: string) {
@@ -75,8 +112,8 @@ export default function StudyDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
     });
-    if (res.ok && study) {
-      setStudy({ ...study, status: newStatus as StudyDetail["status"] });
+    if (res.ok && data) {
+      setData({ ...data, study: { ...data.study, status: newStatus } });
     }
   }
 
@@ -87,38 +124,56 @@ export default function StudyDetailPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <p className="text-sm text-muted-foreground">Loading study...</p>
-      </div>
-    );
-  }
+  const stats = data?.stats;
+  const study = data?.study;
 
-  if (!study) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <p className="text-sm text-destructive">Study not found.</p>
-      </div>
-    );
-  }
-
-  const enrollmentCount = study.enrollments.length;
-  const completedCount = study.enrollments.filter((e) => e.status === "COMPLETED").length;
-  const flaggedCount = study.enrollments.filter((e) => e.flagged).length;
-  const avgQuality =
-    study.enrollments
-      .filter((e) => e.averageQualityScore != null)
-      .reduce((sum, e) => sum + (e.averageQualityScore ?? 0), 0) /
-      (study.enrollments.filter((e) => e.averageQualityScore != null).length || 1);
-
-  const sc = statusColors[study.status] ?? statusColors.DRAFT;
-
-  const STATS = [
-    { label: "Enrolled", value: String(enrollmentCount), sub: `/ ${study.targetCount} target`, icon: Users, color: "text-sky-300", bg: "bg-sky-500/20" },
-    { label: "Completed", value: String(completedCount), sub: enrollmentCount ? `${Math.round((completedCount / enrollmentCount) * 100)}%` : "0%", icon: CheckCircle, color: "text-emerald-300", bg: "bg-emerald-500/20" },
-    { label: "Flagged", value: String(flaggedCount), sub: enrollmentCount ? `${Math.round((flaggedCount / enrollmentCount) * 100)}%` : "0%", icon: AlertTriangle, color: "text-rose-300", bg: "bg-rose-500/20" },
-    { label: "Avg Quality", value: avgQuality > 0 ? `${Math.round(avgQuality * 100)}%` : "—", sub: "avg quality", icon: Star, color: "text-violet-300", bg: "bg-violet-500/20" },
+  const STAT_PILLS = [
+    {
+      label: "Enrolled",
+      value: stats ? String(stats.totalEnrollments) : "—",
+      sub: stats ? `${stats.completed} completed` : "",
+      icon: Users,
+      color: "text-sky-300",
+      bg: "bg-sky-500/20",
+    },
+    {
+      label: "Completed",
+      value: stats ? String(stats.completed) : "—",
+      sub: stats && stats.totalEnrollments > 0
+        ? `${((stats.completed / stats.totalEnrollments) * 100).toFixed(1)}%`
+        : "",
+      icon: CheckCircle,
+      color: "text-emerald-300",
+      bg: "bg-emerald-500/20",
+    },
+    {
+      label: "Flagged",
+      value: stats ? String(stats.flagged) : "—",
+      sub: stats && stats.totalEnrollments > 0
+        ? `${((stats.flagged / stats.totalEnrollments) * 100).toFixed(1)}% of total`
+        : "",
+      icon: AlertTriangle,
+      color: "text-rose-300",
+      bg: "bg-rose-500/20",
+    },
+    {
+      label: "In Progress",
+      value: stats ? String(stats.inProgress) : "—",
+      sub: "active",
+      icon: Shield,
+      color: "text-orange-300",
+      bg: "bg-orange-500/20",
+    },
+    {
+      label: "Avg Quality",
+      value: stats ? stats.averageQualityScore.toFixed(2) : "—",
+      sub: stats?.averageSimilarityScore !== null && stats?.averageSimilarityScore !== undefined
+        ? `sim ${stats.averageSimilarityScore.toFixed(2)}`
+        : "quality score",
+      icon: Star,
+      color: "text-violet-300",
+      bg: "bg-violet-500/20",
+    },
   ];
 
   return (
@@ -136,25 +191,43 @@ export default function StudyDetailPage() {
                   </Link>
                   <div className="h-5 w-px bg-white/15" />
                   <div>
-                    <h1 className="text-xl font-bold text-white">{study.title}</h1>
+                    <h1 className="text-xl font-bold text-white">
+                      {study?.title ?? "Loading…"}
+                    </h1>
                     <div className="mt-0.5 flex items-center gap-2.5 text-sm">
-                      <span className={`inline-flex items-center gap-1 rounded-full border ${sc.border} ${sc.bg} px-2 py-0.5 text-xs font-medium ${sc.text}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${sc.dot} ${study.status === "ACTIVE" ? "animate-pulse" : ""}`} />
-                        {study.status}
-                      </span>
-                      <span className="text-white/50">{enrollmentCount} / {study.targetCount} enrolled</span>
+                      {study && (() => {
+                        const sc = statusColors[study.status] ?? statusColors.DRAFT;
+                        return (
+                          <span className={`inline-flex items-center gap-1 rounded-full border ${sc.border} ${sc.bg} px-2 py-0.5 text-xs font-medium ${sc.text}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${sc.dot} ${study.status === "ACTIVE" ? "animate-pulse" : ""}`} />
+                            {study.status}
+                          </span>
+                        );
+                      })()}
+                      {stats && study && (
+                        <>
+                          <span className="text-white/50">
+                            {stats.totalEnrollments} / {study.targetCount} enrolled
+                          </span>
+                          <span className="text-white/30">·</span>
+                          <span className="flex items-center gap-1 text-emerald-400">
+                            <TrendingUp className="h-3.5 w-3.5" />
+                            {stats.completed} completed
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {study.status === "DRAFT" && (
+                  {study?.status === "DRAFT" && (
                     <Button size="sm" className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => toggleStatus("ACTIVE")}>
                       <Eye className="h-3.5 w-3.5" />
                       Activate
                     </Button>
                   )}
-                  {study.status === "ACTIVE" && (
+                  {study?.status === "ACTIVE" && (
                     <Button size="sm" variant="ghost" className="gap-1.5 border border-white/15 text-white/70 hover:text-white hover:bg-white/10" onClick={() => toggleStatus("CLOSED")}>
                       <EyeOff className="h-3.5 w-3.5" />
                       Close
@@ -168,7 +241,7 @@ export default function StudyDetailPage() {
               </div>
 
               <div className="flex items-center gap-1 pb-4 overflow-x-auto">
-                {STATS.map((s, i) => {
+                {STAT_PILLS.map((s, i) => {
                   const Icon = s.icon;
                   return (
                     <div key={s.label} className="flex items-center gap-1">
@@ -206,12 +279,50 @@ export default function StudyDetailPage() {
         </div>
 
         <div className="mx-auto max-w-7xl px-6 py-10">
-          <TabsContent value="overview"><OverviewTab data={analytics} /></TabsContent>
-          <TabsContent value="integrity"><IntegrityTab data={analytics} /></TabsContent>
-          <TabsContent value="linguistic"><LinguisticTab /></TabsContent>
-          <TabsContent value="geographic"><GeographicTab /></TabsContent>
-          <TabsContent value="behavior"><BehaviorTab /></TabsContent>
-          <TabsContent value="questions"><QuestionsTab data={analytics} /></TabsContent>
+          <TabsContent value="overview">
+            <OverviewTab
+              qualityDistribution={
+                stats
+                  ? [
+                      { name: "High Quality", value: stats.qualityDistribution.high, color: "#10b981" },
+                      { name: "Moderate", value: stats.qualityDistribution.medium, color: "#f59e0b" },
+                      { name: "Low Quality", value: stats.qualityDistribution.low, color: "#ef4444" },
+                    ]
+                  : []
+              }
+              enrollmentTrend={data?.enrollmentTrend ?? []}
+              dimensionScores={
+                data?.dimensionScores
+                  ? [
+                      { label: "Coherence", score: data.dimensionScores.coherence ?? 0, color: "#6d28d9" },
+                      { label: "Effort", score: data.dimensionScores.effort ?? 0, color: "#2563eb" },
+                      { label: "Consistency", score: data.dimensionScores.consistency ?? 0, color: "#059669" },
+                      ...(data.dimensionScores.similarity !== null && data.dimensionScores.similarity !== undefined
+                        ? [{ label: "Similarity", score: data.dimensionScores.similarity, color: "#db2777" }]
+                        : []),
+                    ]
+                  : []
+              }
+            />
+          </TabsContent>
+          <TabsContent value="integrity">
+            <IntegrityTab enrollments={data?.enrollments ?? []} />
+          </TabsContent>
+          <TabsContent value="linguistic">
+            <LinguisticTab
+              enrollments={data?.enrollments ?? []}
+              questionStats={data?.questionStats ?? []}
+            />
+          </TabsContent>
+          <TabsContent value="geographic">
+            <GeographicTab />
+          </TabsContent>
+          <TabsContent value="behavior">
+            <BehaviorTab />
+          </TabsContent>
+          <TabsContent value="questions">
+            <QuestionsTab questionStats={data?.questionStats ?? []} />
+          </TabsContent>
         </div>
       </Tabs>
     </div>

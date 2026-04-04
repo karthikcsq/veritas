@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
 
+function avg(arr: number[]): number {
+  return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ studyId: string }> }
@@ -13,276 +17,183 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // ── Enrollments with per-enrollment aggregate scores ──
-  const enrollmentsResult = await pool.query(
-    `SELECT
-      e."id",
-      e."status",
-      e."enrolledAt",
-      e."completedAt",
-      COALESCE(
-        (SELECT AVG(qs."overallScore") FROM "Response" r
-         JOIN "QualityScore" qs ON qs."responseId" = r."id"
-         WHERE r."enrollmentId" = e."id"), NULL
-      ) AS "avgOverall",
-      COALESCE(
-        (SELECT AVG(qs."coherenceScore") FROM "Response" r
-         JOIN "QualityScore" qs ON qs."responseId" = r."id"
-         WHERE r."enrollmentId" = e."id"), NULL
-      ) AS "avgCoherence",
-      COALESCE(
-        (SELECT AVG(qs."effortScore") FROM "Response" r
-         JOIN "QualityScore" qs ON qs."responseId" = r."id"
-         WHERE r."enrollmentId" = e."id"), NULL
-      ) AS "avgEffort",
-      COALESCE(
-        (SELECT AVG(qs."consistencyScore") FROM "Response" r
-         JOIN "QualityScore" qs ON qs."responseId" = r."id"
-         WHERE r."enrollmentId" = e."id"), NULL
-      ) AS "avgConsistency",
-      COALESCE(
-        (SELECT bool_or(qs."flagged") FROM "Response" r
-         JOIN "QualityScore" qs ON qs."responseId" = r."id"
-         WHERE r."enrollmentId" = e."id"), false
-      ) AS "hasFlaggedResponse",
-      (SELECT string_agg(DISTINCT qs."flagReason", '; ')
-       FROM "Response" r
-       JOIN "QualityScore" qs ON qs."responseId" = r."id"
-       WHERE r."enrollmentId" = e."id" AND qs."flagReason" IS NOT NULL
-      ) AS "flagReasons"
-    FROM "Enrollment" e
-    WHERE e."studyId" = $1
-    ORDER BY e."enrolledAt" ASC`,
+  const studyResult = await pool.query(
+    `SELECT "id", "title", "status", "targetCount" FROM "Study" WHERE "id" = $1`,
     [studyId]
   );
+  if (!studyResult.rows[0]) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  const study = studyResult.rows[0];
 
-  const enrollments = enrollmentsResult.rows.map((e) => ({
-    id: e.id,
-    status: e.status,
-    enrolledAt: e.enrolledAt instanceof Date ? e.enrolledAt.toISOString() : e.enrolledAt,
-    completedAt: e.completedAt instanceof Date ? e.completedAt?.toISOString() : e.completedAt ?? null,
-    avgOverall: e.avgOverall !== null ? parseFloat(e.avgOverall) : null,
-    avgCoherence: e.avgCoherence !== null ? parseFloat(e.avgCoherence) : null,
-    avgEffort: e.avgEffort !== null ? parseFloat(e.avgEffort) : null,
-    avgConsistency: e.avgConsistency !== null ? parseFloat(e.avgConsistency) : null,
-    hasFlaggedResponse: e.hasFlaggedResponse,
-    flagReasons: e.flagReasons ?? null,
-  }));
-
-  // ── Global dimension averages ──
-  const dimResult = await pool.query(
+  const statsResult = await pool.query(
     `SELECT
-      AVG(qs."coherenceScore") AS "avgCoherence",
-      AVG(qs."effortScore") AS "avgEffort",
-      AVG(qs."consistencyScore") AS "avgConsistency",
-      AVG(qs."overallScore") AS "avgOverall",
-      COUNT(*) AS "totalScored"
+      COUNT(*) AS total,
+      COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) AS completed,
+      COUNT(CASE WHEN status IN ('IN_PROGRESS', 'VERIFIED') THEN 1 END) AS in_progress,
+      COUNT(CASE WHEN status = 'FLAGGED' THEN 1 END) AS flagged
+    FROM "Enrollment" WHERE "studyId" = $1`,
+    [studyId]
+  );
+  const s = statsResult.rows[0];
+
+  const scoresResult = await pool.query(
+    `SELECT
+      qs."overallScore", qs."coherenceScore", qs."effortScore",
+      qs."consistencyScore", qs."similarityScore"
     FROM "QualityScore" qs
     JOIN "Response" r ON r."id" = qs."responseId"
     JOIN "Enrollment" e ON e."id" = r."enrollmentId"
     WHERE e."studyId" = $1`,
     [studyId]
   );
-  const dim = dimResult.rows[0];
 
-  // ── Quality distribution ──
-  const distResult = await pool.query(
-    `SELECT
-      COUNT(*) FILTER (WHERE sub."avg" >= 0.7) AS "high",
-      COUNT(*) FILTER (WHERE sub."avg" >= 0.45 AND sub."avg" < 0.7) AS "moderate",
-      COUNT(*) FILTER (WHERE sub."avg" < 0.45) AS "flagged"
-    FROM (
-      SELECT e."id", AVG(qs."overallScore") AS "avg"
-      FROM "Enrollment" e
-      JOIN "Response" r ON r."enrollmentId" = e."id"
-      JOIN "QualityScore" qs ON qs."responseId" = r."id"
-      WHERE e."studyId" = $1
-      GROUP BY e."id"
-    ) sub`,
-    [studyId]
-  );
-  const dist = distResult.rows[0];
+  const allScores = scoresResult.rows;
+  const overallArr = allScores.map((r) => parseFloat(r.overallScore));
+  const coherenceArr = allScores.filter((r) => r.coherenceScore !== null).map((r) => parseFloat(r.coherenceScore));
+  const effortArr = allScores.filter((r) => r.effortScore !== null).map((r) => parseFloat(r.effortScore));
+  const consistencyArr = allScores.filter((r) => r.consistencyScore !== null).map((r) => parseFloat(r.consistencyScore));
+  const simArr = allScores.filter((r) => r.similarityScore !== null).map((r) => parseFloat(r.similarityScore));
 
-  // ── Enrollment trend (cumulative by date) ──
   const trendResult = await pool.query(
     `SELECT
-      DATE(e."enrolledAt") AS "date",
-      COUNT(*) AS "enrolled",
-      COUNT(*) FILTER (WHERE e."status" = 'COMPLETED') AS "completed",
-      COUNT(*) FILTER (WHERE e."status" = 'FLAGGED') AS "flagged"
-    FROM "Enrollment" e
-    WHERE e."studyId" = $1
-    GROUP BY DATE(e."enrolledAt")
-    ORDER BY DATE(e."enrolledAt") ASC`,
+      DATE("enrolledAt") AS date,
+      COUNT(*) AS enrolled,
+      COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) AS completed,
+      COUNT(CASE WHEN status = 'FLAGGED' THEN 1 END) AS flagged
+    FROM "Enrollment"
+    WHERE "studyId" = $1
+    GROUP BY DATE("enrolledAt")
+    ORDER BY DATE("enrolledAt")`,
     [studyId]
   );
 
-  let cumEnrolled = 0, cumCompleted = 0, cumFlagged = 0;
-  const trend = trendResult.rows.map((row) => {
-    cumEnrolled += parseInt(row.enrolled);
-    cumCompleted += parseInt(row.completed);
-    cumFlagged += parseInt(row.flagged);
-    const d = new Date(row.date);
-    return {
-      date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      enrolled: cumEnrolled,
-      completed: cumCompleted,
-      flagged: cumFlagged,
-    };
-  });
-
-  // ── Per-question stats ──
-  const questionsResult = await pool.query(
+  const enrollmentsResult = await pool.query(
     `SELECT
-      q."id", q."order", q."type", q."prompt", q."options",
-      COUNT(r."id") AS "responseCount",
-      (SELECT COUNT(DISTINCT r2."enrollmentId") FROM "Response" r2 WHERE r2."questionId" = q."id")::float
-        / NULLIF((SELECT COUNT(*) FROM "Enrollment" e2 WHERE e2."studyId" = $1), 0) * 100 AS "responseRate",
-      AVG(qs."overallScore") AS "avgQuality"
-    FROM "Question" q
-    LEFT JOIN "Response" r ON r."questionId" = q."id"
+      e."id", e."status",
+      AVG(qs."overallScore")     AS overall,
+      AVG(qs."coherenceScore")   AS coherence,
+      AVG(qs."effortScore")      AS effort,
+      AVG(qs."consistencyScore") AS consistency,
+      AVG(qs."similarityScore")  AS similarity,
+      BOOL_OR(qs."flagged")      AS flagged,
+      STRING_AGG(DISTINCT qs."flagReason", '; ' ORDER BY qs."flagReason") AS flag_reason,
+      STRING_AGG(DISTINCT qs."similarityReason", '; ' ORDER BY qs."similarityReason") AS similarity_reason
+    FROM "Enrollment" e
+    LEFT JOIN "Response" r ON r."enrollmentId" = e."id"
     LEFT JOIN "QualityScore" qs ON qs."responseId" = r."id"
-    WHERE q."studyId" = $1
-    GROUP BY q."id", q."order", q."type", q."prompt", q."options"
-    ORDER BY q."order" ASC`,
+    WHERE e."studyId" = $1
+    GROUP BY e."id", e."status"
+    ORDER BY e."id"`,
     [studyId]
   );
 
-  // For scale questions, get the average value
-  const scaleQuestionIds = questionsResult.rows
-    .filter((q) => q.type === "SCALE")
-    .map((q) => q.id);
-
-  let scaleAvgs: Record<string, number> = {};
-  if (scaleQuestionIds.length > 0) {
-    const scaleResult = await pool.query(
-      `SELECT r."questionId", AVG(CAST(r."value" AS float)) AS "avgValue"
-       FROM "Response" r
-       WHERE r."questionId" = ANY($1)
-       GROUP BY r."questionId"`,
-      [scaleQuestionIds]
-    );
-    for (const row of scaleResult.rows) {
-      scaleAvgs[row.questionId] = parseFloat(row.avgValue);
-    }
-  }
-
-  // For LONG_TEXT / SHORT_TEXT, get average word count
-  const textQuestionIds = questionsResult.rows
-    .filter((q) => q.type === "LONG_TEXT" || q.type === "SHORT_TEXT")
-    .map((q) => q.id);
-
-  let textAvgWords: Record<string, number> = {};
-  if (textQuestionIds.length > 0) {
-    const textResult = await pool.query(
-      `SELECT r."questionId",
-        AVG(array_length(string_to_array(trim(r."value"), ' '), 1)) AS "avgWords"
-       FROM "Response" r
-       WHERE r."questionId" = ANY($1)
-       GROUP BY r."questionId"`,
-      [textQuestionIds]
-    );
-    for (const row of textResult.rows) {
-      textAvgWords[row.questionId] = Math.round(parseFloat(row.avgWords));
-    }
-  }
-
-  // For MULTIPLE_CHOICE, get distribution
-  const mcQuestionIds = questionsResult.rows
-    .filter((q) => q.type === "MULTIPLE_CHOICE")
-    .map((q) => q.id);
-
-  let mcDistributions: Record<string, Record<string, number>> = {};
-  if (mcQuestionIds.length > 0) {
-    const mcResult = await pool.query(
-      `SELECT r."questionId", r."value", COUNT(*) AS "cnt"
-       FROM "Response" r
-       WHERE r."questionId" = ANY($1)
-       GROUP BY r."questionId", r."value"
-       ORDER BY "cnt" DESC`,
-      [mcQuestionIds]
-    );
-    for (const row of mcResult.rows) {
-      if (!mcDistributions[row.questionId]) mcDistributions[row.questionId] = {};
-      mcDistributions[row.questionId][row.value] = parseInt(row.cnt);
-    }
-  }
-
-  const questions = questionsResult.rows.map((q) => {
-    let stat = "";
-    if (q.type === "SCALE" && scaleAvgs[q.id] !== undefined) {
-      stat = `Avg response: ${scaleAvgs[q.id].toFixed(1)}`;
-    } else if ((q.type === "LONG_TEXT" || q.type === "SHORT_TEXT") && textAvgWords[q.id] !== undefined) {
-      stat = `Avg length: ${textAvgWords[q.id]} words`;
-    } else if (q.type === "MULTIPLE_CHOICE" && mcDistributions[q.id]) {
-      const entries = Object.entries(mcDistributions[q.id]);
-      const total = entries.reduce((s, [, c]) => s + c, 0);
-      if (entries.length > 0) {
-        stat = `Top choice: ${entries[0][0]} (${Math.round((entries[0][1] / total) * 100)}%)`;
-      }
-    }
-
-    return {
-      id: q.id,
-      order: q.order,
-      type: q.type,
-      prompt: q.prompt,
-      options: q.options,
-      responseCount: parseInt(q.responseCount),
-      responseRate: q.responseRate !== null ? Math.round(parseFloat(q.responseRate)) : 0,
-      avgQuality: q.avgQuality !== null ? parseFloat(q.avgQuality) : null,
-      stat,
-    };
-  });
-
-  // ── Per-enrollment response details (for integrity comparisons) ──
   const responsesResult = await pool.query(
     `SELECT
-      r."enrollmentId",
-      q."prompt" AS "question",
-      r."value" AS "answer",
-      qs."overallScore",
-      qs."flagged",
-      qs."flagReason"
+      r."id", r."enrollmentId", r."questionId", r."value", r."timeSpentMs",
+      q."prompt", q."type"
     FROM "Response" r
     JOIN "Question" q ON q."id" = r."questionId"
-    LEFT JOIN "QualityScore" qs ON qs."responseId" = r."id"
     JOIN "Enrollment" e ON e."id" = r."enrollmentId"
-    WHERE e."studyId" = $1
-    ORDER BY q."order" ASC`,
+    WHERE e."studyId" = $1`,
     [studyId]
   );
 
-  const responsesByEnrollment: Record<
-    string,
-    Array<{ question: string; answer: string; score: number | null; flagged: boolean }>
-  > = {};
-
-  for (const row of responsesResult.rows) {
-    if (!responsesByEnrollment[row.enrollmentId]) responsesByEnrollment[row.enrollmentId] = [];
-    responsesByEnrollment[row.enrollmentId].push({
-      question: row.question,
-      answer: row.answer,
-      score: row.overallScore !== null ? parseFloat(row.overallScore) : null,
-      flagged: row.flagged ?? false,
+  const responsesByEnrollment: Record<string, object[]> = {};
+  for (const r of responsesResult.rows) {
+    if (!responsesByEnrollment[r.enrollmentId]) responsesByEnrollment[r.enrollmentId] = [];
+    responsesByEnrollment[r.enrollmentId].push({
+      questionId: r.questionId,
+      questionPrompt: r.prompt,
+      questionType: r.type,
+      value: r.value ?? "",
+      timeSpentMs: r.timeSpentMs ? parseInt(r.timeSpentMs) : null,
+      wordCount: r.value ? r.value.split(/\s+/).filter(Boolean).length : 0,
     });
   }
 
+  const questionStatsResult = await pool.query(
+    `SELECT
+      q."id", q."order", q."type", q."prompt", q."options",
+      COUNT(r."id")              AS response_count,
+      AVG(r."timeSpentMs")       AS avg_time_ms,
+      AVG(qs."overallScore")     AS avg_quality,
+      AVG(qs."similarityScore")  AS avg_similarity
+    FROM "Question" q
+    LEFT JOIN "Response" r ON r."questionId" = q."id"
+      AND EXISTS (SELECT 1 FROM "Enrollment" e WHERE e."id" = r."enrollmentId" AND e."studyId" = $1)
+    LEFT JOIN "QualityScore" qs ON qs."responseId" = r."id"
+    WHERE q."studyId" = $1
+    GROUP BY q."id", q."order", q."type", q."prompt", q."options"
+    ORDER BY q."order"`,
+    [studyId]
+  );
+
+  const totalEnrollments = parseInt(s.total, 10);
+
   return NextResponse.json({
-    enrollments,
-    dimensions: {
-      coherence: dim.avgCoherence ? Math.round(parseFloat(dim.avgCoherence) * 100) : 0,
-      effort: dim.avgEffort ? Math.round(parseFloat(dim.avgEffort) * 100) : 0,
-      consistency: dim.avgConsistency ? Math.round(parseFloat(dim.avgConsistency) * 100) : 0,
-      overall: dim.avgOverall ? Math.round(parseFloat(dim.avgOverall) * 100) : 0,
+    study: {
+      id: study.id,
+      title: study.title,
+      status: study.status,
+      targetCount: study.targetCount,
     },
-    qualityDistribution: {
-      high: parseInt(dist.high),
-      moderate: parseInt(dist.moderate),
-      flagged: parseInt(dist.flagged),
+    stats: {
+      totalEnrollments,
+      completed: parseInt(s.completed, 10),
+      inProgress: parseInt(s.in_progress, 10),
+      flagged: parseInt(s.flagged, 10),
+      averageQualityScore: Math.round(avg(overallArr) * 100) / 100,
+      averageSimilarityScore: simArr.length ? Math.round(avg(simArr) * 100) / 100 : null,
+      qualityDistribution: {
+        high: overallArr.filter((v) => v >= 0.7).length,
+        medium: overallArr.filter((v) => v >= 0.45 && v < 0.7).length,
+        low: overallArr.filter((v) => v < 0.45).length,
+      },
     },
-    trend,
-    questions,
-    responsesByEnrollment,
+    enrollmentTrend: trendResult.rows.map((r) => ({
+      date: r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10),
+      enrolled: parseInt(r.enrolled, 10),
+      completed: parseInt(r.completed, 10),
+      flagged: parseInt(r.flagged, 10),
+    })),
+    dimensionScores: {
+      coherence: Math.round(avg(coherenceArr) * 100),
+      effort: Math.round(avg(effortArr) * 100),
+      consistency: Math.round(avg(consistencyArr) * 100),
+      similarity: simArr.length ? Math.round(avg(simArr) * 100) : null,
+    },
+    enrollments: enrollmentsResult.rows.map((e) => ({
+      id: e.id,
+      status: e.status,
+      overallScore: e.overall !== null ? Math.round(parseFloat(e.overall) * 100) / 100 : null,
+      coherenceScore: e.coherence !== null ? Math.round(parseFloat(e.coherence) * 100) / 100 : null,
+      effortScore: e.effort !== null ? Math.round(parseFloat(e.effort) * 100) / 100 : null,
+      consistencyScore: e.consistency !== null ? Math.round(parseFloat(e.consistency) * 100) / 100 : null,
+      similarityScore: e.similarity !== null ? Math.round(parseFloat(e.similarity) * 100) / 100 : null,
+      flagged: e.flagged ?? false,
+      flagReason: e.flag_reason ?? null,
+      similarityReason: e.similarity_reason ?? null,
+      responses: (responsesByEnrollment[e.id] ?? []) as {
+        questionId: string;
+        questionPrompt: string;
+        questionType: string;
+        value: string;
+        timeSpentMs: number | null;
+        wordCount: number;
+      }[],
+    })),
+    questionStats: questionStatsResult.rows.map((q) => ({
+      questionId: q.id,
+      order: parseInt(q.order, 10),
+      type: q.type,
+      prompt: q.prompt,
+      options: q.options ?? null,
+      responseCount: parseInt(q.response_count, 10),
+      totalEnrollments,
+      avgTimeSec: q.avg_time_ms !== null ? Math.round(parseFloat(q.avg_time_ms) / 1000) : null,
+      avgQuality: q.avg_quality !== null ? Math.round(parseFloat(q.avg_quality) * 100) / 100 : null,
+      avgSimilarity: q.avg_similarity !== null ? Math.round(parseFloat(q.avg_similarity) * 100) / 100 : null,
+    })),
   });
 }
