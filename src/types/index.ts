@@ -50,6 +50,7 @@ export interface CreateStudyRequest {
   description: string;
   targetCount: number;
   compensationUsd: number;
+  publiclyListed?: boolean;
   questions: Array<{
     order: number;
     type: QuestionType;

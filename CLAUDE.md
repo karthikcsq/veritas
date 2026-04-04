@@ -18,3 +18,6 @@ Clinical research participant verification platform combining World ID proof-of-
 - API routes use raw SQL queries with parameterized values (`$1`, `$2`, etc.)
 - Auth via NextAuth.js with credentials + World ID providers
 - Quality scoring dimensions: coherence (30%), effort (25%), consistency (30%), specificity (15%)
+
+## Git Rules
+- Do NOT add `Co-Authored-By` lines or any AI author attribution to commits

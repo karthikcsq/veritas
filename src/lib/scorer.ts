@@ -169,7 +169,7 @@ export async function checkResponseValidity(
   }
 
   const completion = await getOpenAI().chat.completions.create({
-    model: "gpt-5.4-nano",
+    model: "gpt-5.4-mini",
     messages: [
       {
         role: "user",
@@ -264,7 +264,7 @@ export async function checkContradictions(
   }
 
   const completion = await getOpenAI().chat.completions.create({
-    model: "gpt-5.4-nano",
+    model: "gpt-5.4-mini",
     messages: [
       {
         role: "user",
