@@ -127,7 +127,7 @@ async function checkQuestionSimilarityThreshold(
   if (questions.length === 0) return true;
 
   // Count how many questions have similarity >= 0.9
-  const questionsWithHighSimilarity = questions.filter((q: any) => 
+  const questionsWithHighSimilarity = questions.filter((q: any) =>
     q.similarityScore !== null && q.similarityScore >= 0.9
   ).length;
 
@@ -155,7 +155,7 @@ export async function triggerScoringPipeline(
   // Fetch responses with question prompts, questionId, and studyId
   const responsesResult = await pool.query(
     `SELECT r."id", r."value", r."timeSpentMs", r."questionId",
-            q."prompt", e."studyId"
+            q."prompt", q."type", e."studyId"
      FROM "Response" r
      JOIN "Question" q  ON q."id" = r."questionId"
      JOIN "Enrollment" e ON e."id" = r."enrollmentId"
@@ -183,12 +183,14 @@ export async function triggerScoringPipeline(
         allResponsesInEnrollment: allResponses,
       });
 
-      // ── 2. RAG similarity analysis (new) ──────────────────────────
+      // ── 2. RAG similarity analysis (free-response only) ───────────
+      // Only meaningful for open-ended text; skip MCQ and scale questions.
       // Runs outside the DB transaction so a Pinecone failure doesn't
       // roll back the quality scores.
       let simScore: number | null = null;
       let simReason: string | null = null;
-      try {
+      const isFreeResponse = response.type === "SHORT_TEXT" || response.type === "LONG_TEXT";
+      if (isFreeResponse) try {
         const sim = await analyzeSimilarity({
           responseId: response.id,
           questionId: response.questionId,
