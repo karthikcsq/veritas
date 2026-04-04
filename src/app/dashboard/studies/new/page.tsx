@@ -66,7 +66,41 @@ export default function NewStudyPage() {
     const updated = [...questions];
     const [moved] = updated.splice(dragIdx, 1);
     updated.splice(dropIdx, 0, moved);
-    setQuestions(updated.map((q, i) => ({ ...q, order: i + 1 })));
+    const reordered = updated.map((q, i) => ({ ...q, order: i + 1 }));
+    setQuestions(reordered);
+
+    // Build a map from old index (by prompt) to new index
+    const newIndexByPrompt = new Map<string, number>();
+    reordered.forEach((q, i) => newIndexByPrompt.set(q.prompt, i));
+
+    // Remap specificity suggestion indices to follow their questions
+    if (specificityResult) {
+      setSpecificityResult({
+        ...specificityResult,
+        suggestions: specificityResult.suggestions.map((s) => {
+          const newIdx = newIndexByPrompt.get(s.originalPrompt);
+          return newIdx !== undefined ? { ...s, questionIndex: newIdx } : s;
+        }),
+      });
+    }
+
+    // Remap reverse recommendation suggestedOrder to maintain relative distance
+    if (qualityResult) {
+      setQualityResult({
+        ...qualityResult,
+        recommendations: qualityResult.recommendations.map((r) => {
+          const origNewIdx = newIndexByPrompt.get(r.originalPrompt);
+          if (origNewIdx === undefined) return r;
+          // Place the reverse question right after the original (new position + 1 order)
+          // but keep separation: use distance from original's old position
+          const oldOrigIdx = questions.findIndex((q) => q.prompt === r.originalPrompt);
+          const distance = r.suggestedOrder - (oldOrigIdx + 1);
+          const newSuggestedOrder = Math.max(1, Math.min(reordered.length, (origNewIdx + 1) + distance));
+          return { ...r, suggestedOrder: newSuggestedOrder };
+        }),
+      });
+    }
+
     setDragIdx(null);
     setDragOverIdx(null);
   }

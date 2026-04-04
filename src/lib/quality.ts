@@ -569,7 +569,7 @@ export async function analyzeSpecificity(
     messages: [
       {
         role: "user",
-        content: `You are a clinical survey design expert. Review the researcher's questions for SPECIFICITY, CLARITY, and whether the question MAKES SENSE with its response format.
+        content: `You are a clinical survey design expert. Evaluate EACH question using the checklist below, IN ORDER. The checklist is mandatory — you MUST check every step for every question.
 ${studyContext}
 REFERENCE EXAMPLES (from validated instruments — notice how the question wording matches the response format):
 ${referenceExamples}
@@ -577,36 +577,58 @@ ${referenceExamples}
 RESEARCHER'S QUESTIONS:
 ${userQuestions}
 
-Analyze each question for:
+=== MANDATORY CHECKLIST (evaluate EVERY question in this order) ===
 
-1. QUESTION-SCALE COHERENCE: Does the question make sense with its response format?
-   - A 0-10 numeric scale works for INTENSITY (e.g., "Rate your pain level")
-   - A 0-4 "Not at all" to "Nearly every day" scale works for FREQUENCY (e.g., "I have been feeling sad")
-   - A 1-5 "Very poor" to "Very good" scale works for EVALUATION
-   - If the question asks about frequency but the scale measures intensity (or vice versa), flag it
-   - When the mismatch is clear, suggest BOTH a rewritten question text AND a type/scale change
+**STEP 1 — Question-Scale Match (MOST IMPORTANT — do this first):**
+For each SCALE question, check: does the question wording match what the scale measures?
 
-2. SPECIFICITY: Is the question specific enough?
-   - Vague: "How do you feel?" → Better: "Over the past month, how much has pain interfered with your daily activities?"
-   - Missing timeframe: "I have pain" → Better: "Over the past month, I have experienced pain"
+- FREQUENCY statements ("I have been experiencing...", "How often...", "I have felt...") need a FREQUENCY scale:
+  → 0-4 with labels "Not at all" to "Nearly every day", OR 0-4 with "Never" to "Always"
+  → If on a 1-10 or 0-10 intensity scale, this is a MISMATCH. You MUST either:
+    (a) Suggest changing to a 0-4 frequency scale with appropriate labels, OR
+    (b) Rewrite the question to measure intensity instead (e.g., "Rate your average pain level over the past month")
 
-3. TIMEFRAME CONSISTENCY: Does the timeframe match the study description?
+- INTENSITY questions ("Rate your...", "How severe...", "How much...") need an INTENSITY scale:
+  → 0-10 with labels like "No pain" to "Worst pain imaginable"
+  → If on a 0-4 frequency scale, this is a MISMATCH.
 
-4. CLARITY: Could participants misinterpret the question?
+- EVALUATION questions ("How would you rate...", "How satisfied...") need an EVALUATION scale:
+  → 1-5 with labels like "Very poor" to "Very good"
 
-ONLY flag questions that genuinely need improvement. If a question is clear and its wording fits its scale, do NOT suggest changes.
+EXAMPLES of Step 1:
+- BAD: "I have been experiencing pain" on Scale 1-10 with no labels → MISMATCH. Suggest EITHER: change to 0-4 frequency scale with "Not at all"/"Nearly every day" labels, OR rewrite to "Over the past month, rate your average pain level" with "No pain"/"Worst pain imaginable" labels.
+- BAD: "Rate your pain level" on Scale 1-10 with no labels → Scale range is OK, but MISSING LABELS. Suggest labels "No pain" / "Worst pain imaginable".
+- OK: "Rate your pain level" on Scale 0-10 with "No pain"/"Worst pain" → No change needed.
 
-For each flagged question, provide a rewritten version that:
-- Keeps the same construct and intent
-- Matches the style/tone of the original
-- Uses the correct timeframe from the study description
+When Step 1 finds a mismatch, you MUST include "suggestedType" and "suggestedConfig" in your response. Do NOT just rewrite the text — actually change the type/scale/labels.
 
-You CAN suggest changing the question type or scale range/labels when the current format does not match the question's intent:
-- If a frequency question ("I have been...", "How often...") is on a 1-10 intensity scale, suggest EITHER:
-  (a) changing to a 0-4 frequency scale with "Not at all" to "Nearly every day" labels, OR
-  (b) rewriting the question to be about intensity (e.g., "Rate your pain level over the past month")
-- If an intensity question is on a frequency scale, suggest fixing accordingly
-- Only suggest type/scale changes when there is a genuine mismatch — do not change scales that already fit
+**STEP 2 — Scale Labels (REQUIRED for all SCALE questions):**
+If a SCALE question has NO minLabel or maxLabel, you MUST suggest appropriate labels in "suggestedConfig", even if the question text and scale range are perfectly fine. Labels are REQUIRED for participant clarity.
+
+Examples:
+- Scale 1-10, no labels → suggest minLabel/maxLabel (e.g., "No pain" / "Worst pain imaginable")
+- Scale 0-4, no labels → suggest minLabel/maxLabel (e.g., "Not at all" / "Nearly every day")
+- Scale 0-10 with "No pain"/"Worst pain" → labels already present, no change needed
+
+When suggesting labels only (no range change), still include the full "suggestedConfig" with the existing min/max plus the new labels.
+
+**STEP 3 — Timeframe:**
+Does the question include the timeframe from the study description?
+- If the study says "past month" but the question has no timeframe, add it to the suggested prompt.
+- If there is no study description, prefer adding "Over the past 2 weeks" or similar standard clinical timeframe.
+
+**STEP 4 — Specificity:**
+Is the question specific enough compared to validated instruments?
+- Vague: "How do you feel?" → Better: "Over the past month, how much has pain interfered with your daily activities?"
+- Missing context: "I have pain" → Better: "Over the past month, I have experienced pain that interfered with daily activities"
+
+=== END CHECKLIST ===
+
+IMPORTANT RULES:
+- Step 1 (question-scale match) is the MOST IMPORTANT check. If you find a mismatch, you MUST suggest a type/config change — do NOT just rewrite the text.
+- Step 2 (labels) is REQUIRED. Any SCALE question without minLabel AND maxLabel MUST get a suggestion with labels, even if everything else is perfect.
+- ONLY flag questions that genuinely need improvement on at least one step. If a question passes ALL steps, do NOT include it.
+- Keep the same construct and intent. Match the style/tone of the original.
 
 Respond ONLY with valid JSON:
 {
@@ -615,18 +637,19 @@ Respond ONLY with valid JSON:
       "questionIndex": 0,
       "originalPrompt": "the original question",
       "suggestedPrompt": "the improved version",
-      "reason": "One sentence: what was wrong and what you fixed",
+      "reason": "One sentence: which step(s) failed and what you fixed",
       "suggestedType": "SCALE or MULTIPLE_CHOICE or null if no type change",
-      "suggestedConfig": null or {"scale": {"min": 0, "max": 4, "minLabel": "Not at all", "maxLabel": "Nearly every day"}}
+      "suggestedConfig": {"scale": {"min": 0, "max": 4, "minLabel": "Not at all", "maxLabel": "Nearly every day"}}
     }
   ]
 }
 
-Notes on the JSON:
-- "suggestedType" and "suggestedConfig" are optional. Omit them or set to null if only the prompt text needs changing.
-- If you ARE suggesting a type/scale change, always include both "suggestedType" and "suggestedConfig".
+CRITICAL JSON RULES:
+- For ANY SCALE question suggestion, ALWAYS include "suggestedConfig" with "scale" containing min, max, minLabel, and maxLabel — even if you are only adding labels to an existing range.
+- If suggesting a type change, ALWAYS include both "suggestedType" AND "suggestedConfig".
+- "suggestedType" should be null or omitted ONLY if the type is not changing.
 
-If all questions are already good, return an empty suggestions array.`,
+If all questions pass all checklist steps, return an empty suggestions array.`,
       },
     ],
     response_format: { type: "json_object" },
