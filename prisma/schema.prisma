@@ -92,12 +92,13 @@ enum EnrollmentStatus {
 }
 
 model Response {
-  id           String   @id @default(cuid())
-  enrollmentId String
-  questionId   String
-  value        String
-  timeSpentMs  Int
-  submittedAt  DateTime @default(now())
+  id              String   @id @default(cuid())
+  enrollmentId    String
+  questionId      String
+  value           String
+  timeSpentMs     Int
+  validityScore   Int?
+  submittedAt     DateTime @default(now())
 
   enrollment   Enrollment    @relation(fields: [enrollmentId], references: [id])
   question     Question      @relation(fields: [questionId], references: [id])
