@@ -31,10 +31,41 @@ export default function NewStudyPage() {
   const [qualityResult, setQualityResult] = useState<{
     reversePairsDetected: number;
     reversePairs: Array<{ construct: string; relationship: string }>;
-    recommendations: Array<{ originalPrompt: string; reversePrompt: string; explanation: string; suggestedOrder: number }>;
+    recommendations: Array<{
+      originalQuestionId: string;
+      originalPrompt: string;
+      reversePrompt: string;
+      reverseType: string;
+      reverseConfig: { scale?: { min: number; max: number; minLabel?: string; maxLabel?: string } } | null;
+      explanation: string;
+      suggestedOrder: number;
+    }>;
     message: string;
   } | null>(null);
   const [createdStudyId, setCreatedStudyId] = useState<string | null>(null);
+  const [acceptedRecs, setAcceptedRecs] = useState<Set<string>>(new Set());
+
+  function acceptRecommendation(rec: NonNullable<typeof qualityResult>["recommendations"][number]) {
+    if (!createdStudyId) return;
+    setAcceptedRecs((prev) => new Set(prev).add(rec.originalPrompt));
+
+    // Add the reverse question to the study via API
+    fetch(`/api/studies/${createdStudyId}/add-question`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: rec.reverseType || "SCALE",
+        prompt: rec.reversePrompt,
+        order: rec.suggestedOrder,
+        required: true,
+        config: rec.reverseConfig,
+      }),
+    }).catch(console.error);
+  }
+
+  function dismissRecommendation(originalPrompt: string) {
+    setAcceptedRecs((prev) => new Set(prev).add(originalPrompt));
+  }
   const [questions, setQuestions] = useState<QuestionDraft[]>([
     { order: 1, type: "LONG_TEXT", prompt: "", required: true },
   ]);
@@ -222,8 +253,14 @@ export default function NewStudyPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {questions.map((q, i) => (
-                <div key={i} className="border rounded-lg p-4 space-y-3">
+              {questions.map((q, i) => {
+                // Find recommendation that targets this question
+                const rec = qualityResult?.recommendations.find(
+                  (r) => r.originalPrompt === q.prompt && !acceptedRecs.has(r.originalPrompt)
+                );
+                return (
+                <div key={i}>
+                <div className="border rounded-lg p-4 space-y-3">
                   <div className="flex items-start gap-3">
                     <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium shrink-0 mt-1">
                       {q.order}
@@ -407,7 +444,79 @@ export default function NewStudyPage() {
                     </div>
                   )}
                 </div>
-              ))}
+
+                {/* Inline recommendation card */}
+                {rec && (
+                  <div
+                    id={`rec-${i}`}
+                    className="border-2 border-violet-400 bg-violet-50 rounded-lg p-4 space-y-2 ml-6 animate-in fade-in slide-in-from-top-2"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="h-8 w-8 rounded-full bg-violet-200 text-violet-700 flex items-center justify-center text-sm font-medium shrink-0 mt-1">
+                        +
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-violet-700 bg-violet-200 px-2 py-0.5 rounded">
+                            Suggested Reverse Question
+                          </span>
+                        </div>
+                        <p className="font-medium text-violet-900">&ldquo;{rec.reversePrompt}&rdquo;</p>
+                        <p className="text-xs text-violet-600">{rec.explanation}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 ml-11">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="bg-violet-600 hover:bg-violet-500 text-white"
+                        onClick={() => {
+                          acceptRecommendation(rec);
+                          // Scroll to next recommendation
+                          const nextRec = qualityResult?.recommendations.find(
+                            (r) => r.originalPrompt !== rec.originalPrompt && !acceptedRecs.has(r.originalPrompt)
+                          );
+                          if (nextRec) {
+                            const nextIdx = questions.findIndex((qq) => qq.prompt === nextRec.originalPrompt);
+                            if (nextIdx >= 0) {
+                              setTimeout(() => {
+                                document.getElementById(`rec-${nextIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                              }, 100);
+                            }
+                          }
+                        }}
+                      >
+                        Accept
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-violet-600"
+                        onClick={() => {
+                          dismissRecommendation(rec.originalPrompt);
+                          // Scroll to next recommendation
+                          const nextRec = qualityResult?.recommendations.find(
+                            (r) => r.originalPrompt !== rec.originalPrompt && !acceptedRecs.has(r.originalPrompt)
+                          );
+                          if (nextRec) {
+                            const nextIdx = questions.findIndex((qq) => qq.prompt === nextRec.originalPrompt);
+                            if (nextIdx >= 0) {
+                              setTimeout(() => {
+                                document.getElementById(`rec-${nextIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                              }, 100);
+                            }
+                          }
+                        }}
+                      >
+                        Skip
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                </div>
+                );
+              })}
               <Button type="button" variant="outline" onClick={addQuestion} className="w-full">
                 + Add Question
               </Button>
@@ -423,44 +532,23 @@ export default function NewStudyPage() {
           </Button>
         </form>
 
-        {/* Quality Analysis Results */}
+        {/* Quality summary + continue */}
         {qualityResult && createdStudyId && (
           <Card className="border-2 border-violet-300 bg-violet-50">
-            <CardHeader>
-              <CardTitle className="text-lg">Quality Analysis</CardTitle>
-              <CardDescription>{qualityResult.message}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="py-4 space-y-3">
+              <p className="text-sm font-medium text-violet-900">{qualityResult.message}</p>
               {qualityResult.reversePairsDetected > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Detected reverse-scored pairs:</p>
+                <div className="space-y-1">
                   {qualityResult.reversePairs.map((p, i) => (
-                    <div key={i} className="rounded border bg-white px-3 py-2 text-sm">
-                      <span className="font-medium">{p.construct}</span>
-                      <span className="text-muted-foreground"> — {p.relationship}</span>
-                    </div>
+                    <p key={i} className="text-xs text-violet-700">
+                      Detected pair: <span className="font-medium">{p.construct}</span> — {p.relationship}
+                    </p>
                   ))}
                 </div>
               )}
-
-              {qualityResult.recommendations.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Suggested attention check questions:</p>
-                  {qualityResult.recommendations.map((r, i) => (
-                    <div key={i} className="rounded border bg-white px-3 py-2 text-sm space-y-1">
-                      <p className="text-muted-foreground">For: &ldquo;{r.originalPrompt}&rdquo;</p>
-                      <p className="font-medium">Add: &ldquo;{r.reversePrompt}&rdquo;</p>
-                      <p className="text-xs text-muted-foreground">{r.explanation}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-2">
-                <Button onClick={() => router.push(`/dashboard/studies/${createdStudyId}`)} className="flex-1">
-                  Continue to Study
-                </Button>
-              </div>
+              <Button onClick={() => router.push(`/dashboard/studies/${createdStudyId}`)} className="w-full">
+                Continue to Study
+              </Button>
             </CardContent>
           </Card>
         )}

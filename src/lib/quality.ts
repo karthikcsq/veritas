@@ -453,7 +453,14 @@ Do two things:
 
 2. IF the survey has fewer than 2 natural reverse pairs, SUGGEST new reverse-scored questions to add (up to a total of 2 pairs). If it already has 2+, suggest nothing.
 
-A reverse-scored question measures the SAME construct as an existing question but with OPPOSITE meaning. Good candidates are subjective feelings/states. The reversal must read naturally.
+A reverse-scored question measures the SAME construct as an existing question but with OPPOSITE meaning. Good candidates are subjective feelings/states.
+
+CRITICAL STYLE RULES for generated reverse questions:
+- Match the sentence structure and tone of the original question exactly
+- If the original starts with "I have been...", the reverse should too
+- If the original uses casual language, don't make the reverse formal
+- The reverse should look like it belongs in the same survey — a participant should not be able to tell it was auto-generated
+- Use the same scale range (min/max) and label style as the original
 
 Respond ONLY with valid JSON:
 {
