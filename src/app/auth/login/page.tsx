@@ -1,68 +1,47 @@
 "use client";
 
-import {
-  IDKitRequestWidget,
-  orbLegacy,
-  type IDKitResult,
-  type RpContext,
-} from "@worldcoin/idkit";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { getSession, signIn } from "next-auth/react";
+import { orbLegacy, type IDKitResult, type RpContext } from "@worldcoin/idkit";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const DEFAULT_ACTION = "verify-account";
+const IDKitRequestWidget = dynamic(
+  () => import("@worldcoin/idkit").then((mod) => mod.IDKitRequestWidget),
+  { ssr: false },
+);
 
-async function getRpContext(action: string): Promise<RpContext> {
-  const res = await fetch("/api/world-id/rp-signature", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(
-      typeof err === "object" && err && "error" in err
-        ? String((err as { error: string }).error)
-        : "Failed to get RP signature",
-    );
-  }
-
-  const rpSig = await res.json();
-
-  return {
-    rp_id: rpSig.rp_id,
-    nonce: rpSig.nonce,
-    created_at: rpSig.created_at,
-    expires_at: rpSig.expires_at,
-    signature: rpSig.sig,
-  };
+interface RpSignatureResponse {
+  app_id: `app_${string}`;
+  rp_id: string;
+  sig: string;
+  nonce: string;
+  created_at: number;
+  expires_at: number;
 }
+
+const worldIdEnvironment =
+  process.env.NEXT_PUBLIC_WORLD_ID_ENV === "staging"
+    ? "staging"
+    : "production";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingWorldId, setLoadingWorldId] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [open, setOpen] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const rpContextRef = useRef<RpContext | null>(null);
-  const verifyingRef = useRef(false);
+  const [widgetOpen, setWidgetOpen] = useState(false);
+  const appId = process.env['NEXT_PUBLIC_WORLD_APP_ID'] as `app_${string}`;
+  // const [appId, setAppId] = useState<`app_${string}` | null>(null);
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
 
-  const appId = process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}` | undefined;
-  const preset = orbLegacy();
+  const orbPreset = useMemo(() => orbLegacy(), []);
 
   async function routeAfterLogin() {
     const session = await getSession();
@@ -70,12 +49,9 @@ export default function LoginPage() {
       (session?.user as { requiresOnboarding?: boolean } | undefined)
         ?.requiresOnboarding,
     );
-    window.location.assign(
-      requiresOnboarding ? "/auth/onboarding" : "/dashboard",
-    );
+    window.location.assign(requiresOnboarding ? "/auth/onboarding" : "/dashboard");
   }
 
-  // --- Email/password login ---
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -98,76 +74,57 @@ export default function LoginPage() {
     await routeAfterLogin();
   }
 
-  // --- World ID login (matches reference pattern) ---
-  const verifyOnBackend = useCallback(
-    async (result: IDKitResult) => {
-      if (verifyingRef.current) return;
-      verifyingRef.current = true;
+  async function startWorldIdLogin() {
+    setLoadingWorldId(true);
+    setError(null);
 
-      const ctx = rpContextRef.current;
-      if (!ctx) {
-        verifyingRef.current = false;
-        throw new Error("Missing RP context");
-      }
-
-      const response = await fetch("/api/verify-proof", {
+    try {
+      const response = await fetch("/api/world-id/rp-signature", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          rp_id: ctx.rp_id,
-          idkitResponse: result,
-        }),
+        body: JSON.stringify({ action: "verify-account" }),
       });
 
       if (!response.ok) {
-        throw new Error("Backend verification failed");
+        throw new Error("Could not initialize World ID login");
       }
 
-      // Create a NextAuth session after proof verification
-      const authResult = await signIn("world-id", {
-        idkitResponse: JSON.stringify(result),
-        redirect: false,
-        callbackUrl: "/dashboard",
+      const rpSignature = (await response.json()) as RpSignatureResponse;
+      console.log(rpSignature)
+      // setAppId(rpSignature.app_id);
+      setRpContext({
+        rp_id: rpSignature.rp_id,
+        nonce: rpSignature.nonce,
+        created_at: rpSignature.created_at,
+        expires_at: rpSignature.expires_at,
+        signature: rpSignature.sig,
       });
-
-      if (authResult?.error) {
-        throw new Error("World ID sign-in failed");
-      }
-    },
-    [],
-  );
-
-  const startWorldIdLogin = async () => {
-    if (!appId) {
-      setError("NEXT_PUBLIC_WORLD_APP_ID is not set");
-      return;
-    }
-
-    setStarting(true);
-    setError(null);
-    try {
-      const ctx = await getRpContext(DEFAULT_ACTION);
-      rpContextRef.current = ctx;
-      setRpContext(ctx);
-      setOpen(true);
-    } catch (e) {
-      console.error(e);
-      rpContextRef.current = null;
-      setRpContext(null);
+      setWidgetOpen(true);
+    } catch (err) {
+      console.error(err);
       setError("Failed to start World ID login.");
     } finally {
-      setStarting(false);
+      setLoadingWorldId(false);
     }
-  };
+  }
 
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      rpContextRef.current = null;
-      verifyingRef.current = false;
-      setRpContext(null);
+  async function handleVerify(result: IDKitResult) {
+    const authResult = await signIn("world-id", {
+      idkitResponse: JSON.stringify(result),
+      redirect: false,
+      callbackUrl: "/dashboard",
+    });
+
+    if (authResult?.error) {
+      throw new Error("World ID sign-in failed");
     }
-  };
+  }
+
+  async function handleSuccess() {
+    await routeAfterLogin();
+  }
+
+  console.log(appId, rpContext);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -177,26 +134,18 @@ export default function LoginPage() {
             <span className="text-primary-foreground font-bold">V</span>
           </div>
           <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <CardDescription>
-            Sign in to your researcher account
-          </CardDescription>
+          <CardDescription>Sign in to your researcher account</CardDescription>
         </CardHeader>
         <CardContent>
-          {appId ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full mb-4"
-              onClick={startWorldIdLogin}
-              disabled={starting}
-            >
-              {starting ? "Preparing…" : "Verify with World ID"}
-            </Button>
-          ) : (
-            <p className="text-sm text-red-600 mb-4">
-              Configure NEXT_PUBLIC_WORLD_APP_ID to enable World ID login.
-            </p>
-          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full mb-4"
+            onClick={startWorldIdLogin}
+            disabled={loadingWorldId}
+          >
+            {loadingWorldId ? "Starting World ID..." : "Continue with World ID"}
+          </Button>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -224,35 +173,38 @@ export default function LoginPage() {
             </Button>
           </form>
           {error ? (
-            <p className="mt-4 text-sm text-center text-destructive">
-              {error}
-            </p>
+            <p className="mt-4 text-sm text-center text-destructive">{error}</p>
           ) : null}
 
           <div className="mt-4 text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <Link
-              href="/auth/register"
-              className="underline text-foreground"
-            >
+            <Link href="/auth/register" className="underline text-foreground">
               Register
             </Link>
           </div>
         </CardContent>
       </Card>
 
-      {rpContext ? (
+      
+      {appId && rpContext ? (
         <IDKitRequestWidget
-          open={open}
-          onOpenChange={onOpenChange}
-          app_id={appId!}
-          action={DEFAULT_ACTION}
+          open={widgetOpen}
+          onOpenChange={setWidgetOpen}
+          app_id={appId}
+          action="verify-account"
           rp_context={rpContext}
-          allow_legacy_proofs
-          preset={preset}
-          handleVerify={verifyOnBackend}
-          onSuccess={() => {
-            routeAfterLogin();
+          allow_legacy_proofs={true}
+          preset={orbPreset}
+          environment={worldIdEnvironment}
+          handleVerify={handleVerify}
+          onSuccess={handleSuccess}
+          onError={(err) => {
+            console.error("IDKit error:", err);
+            const errorCode =
+              typeof err === "object" && err !== null && "errorCode" in err
+                ? String((err as { errorCode?: unknown }).errorCode ?? err)
+                : String(err);
+            setError(`World ID verification failed: ${errorCode}`);
           }}
         />
       ) : null}
