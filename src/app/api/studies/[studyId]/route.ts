@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { pool } from "@/lib/db";
 
 export async function GET(
   _req: Request,
@@ -13,23 +13,40 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const study = await prisma.study.findUnique({
-    where: { id: studyId },
-    include: {
-      questions: { orderBy: { order: "asc" } },
-      enrollments: {
-        include: {
-          responses: {
-            include: { qualityScore: true },
-          },
-        },
-      },
-    },
-  });
+  // Fetch study
+  const studyResult = await pool.query(
+    'SELECT "id", "title", "description", "status", "targetCount", "compensationUsd" FROM "Study" WHERE "id" = $1',
+    [studyId]
+  );
+  const study = studyResult.rows[0];
 
   if (!study) {
     return NextResponse.json({ error: "Study not found" }, { status: 404 });
   }
+
+  // Fetch questions
+  const questionsResult = await pool.query(
+    'SELECT "id", "order", "type", "prompt", "options" FROM "Question" WHERE "studyId" = $1 ORDER BY "order" ASC',
+    [studyId]
+  );
+
+  // Fetch enrollments with their responses and quality scores
+  const enrollmentsResult = await pool.query(
+    `SELECT
+      e."id",
+      e."status",
+      e."enrolledAt",
+      COALESCE(
+        (SELECT AVG(qs."overallScore")
+         FROM "Response" r
+         JOIN "QualityScore" qs ON qs."responseId" = r."id"
+         WHERE r."enrollmentId" = e."id"),
+        NULL
+      ) AS "averageQualityScore"
+    FROM "Enrollment" e
+    WHERE e."studyId" = $1`,
+    [studyId]
+  );
 
   return NextResponse.json({
     study: {
@@ -39,23 +56,14 @@ export async function GET(
       status: study.status,
       targetCount: study.targetCount,
       compensationUsd: study.compensationUsd,
-      questions: study.questions,
-      enrollments: study.enrollments.map((e) => {
-        const scores = e.responses
-          .map((r) => r.qualityScore?.overallScore)
-          .filter((s): s is number => s != null);
-        const avg =
-          scores.length > 0
-            ? scores.reduce((a, b) => a + b, 0) / scores.length
-            : null;
-        return {
-          id: e.id,
-          status: e.status,
-          enrolledAt: e.enrolledAt.toISOString(),
-          averageQualityScore: avg,
-          flagged: e.status === "FLAGGED",
-        };
-      }),
+      questions: questionsResult.rows,
+      enrollments: enrollmentsResult.rows.map((e) => ({
+        id: e.id,
+        status: e.status,
+        enrolledAt: e.enrolledAt instanceof Date ? e.enrolledAt.toISOString() : e.enrolledAt,
+        averageQualityScore: e.averageQualityScore !== null ? parseFloat(e.averageQualityScore) : null,
+        flagged: e.status === "FLAGGED",
+      })),
     },
   });
 }
