@@ -178,6 +178,12 @@ export default function LoginPage() {
               Register
             </Link>
           </div>
+          <div className="mt-2 text-center text-sm text-muted-foreground">
+            Looking to participate in a study?{" "}
+            <Link href="/study" className="underline text-foreground">
+              Browse studies
+            </Link>
+          </div>
         </CardContent>
       </Card>
 
