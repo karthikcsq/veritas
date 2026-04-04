@@ -67,6 +67,22 @@ export interface StoredReversePair {
   relationship: string;
 }
 
+// ---------------------------------------------------------------------------
+// Specificity Analysis Types
+// ---------------------------------------------------------------------------
+
+export interface SpecificitySuggestion {
+  questionIndex: number;
+  originalPrompt: string;
+  suggestedPrompt: string;
+  reason: string;
+}
+
+export interface SpecificityResult {
+  suggestions: SpecificitySuggestion[];
+  message: string;
+}
+
 export interface GeneratedReverseItem {
   originalQuestionId: string;
   originalPrompt: string;
@@ -495,4 +511,90 @@ If the survey already has 2+ reverse pairs, return an empty newItems array.`,
   const recommendations = ((result.newItems ?? []) as GeneratedReverseItem[]).slice(0, needed);
 
   return { existingPairCount: existingCount, recommendations };
+}
+
+// ---------------------------------------------------------------------------
+// Specificity Analysis — compare against high-quality reference surveys
+// ---------------------------------------------------------------------------
+
+export async function analyzeSpecificity(
+  questions: Array<{ prompt: string; type: string }>
+): Promise<SpecificityResult> {
+  if (questions.length < 3) {
+    return { suggestions: [], message: "Add more questions to analyze specificity." };
+  }
+
+  // Pull sample questions from validated surveys as reference
+  const refResult = await pool.query(
+    `SELECT q."prompt", q."type", s."title" AS "studyTitle"
+     FROM "Question" q
+     JOIN "Study" s ON s."id" = q."studyId"
+     WHERE s."id" IN ('survey_phq9', 'survey_gad7', 'survey_bpi', 'survey_factg', 'survey_isi')
+     ORDER BY RANDOM()
+     LIMIT 20`
+  );
+
+  const referenceExamples = refResult.rows
+    .map((r) => `[${r.studyTitle}] "${r.prompt}"`)
+    .join("\n");
+
+  const userQuestions = questions
+    .map((q, i) => `[Q${i + 1}] Type: ${q.type} | "${q.prompt}"`)
+    .join("\n");
+
+  const completion = await getOpenAI().chat.completions.create({
+    model: "gpt-5.4-mini",
+    messages: [
+      {
+        role: "user",
+        content: `You are a clinical survey design expert. Compare the researcher's draft questions against these validated clinical survey examples for SPECIFICITY and CLARITY.
+
+REFERENCE EXAMPLES (from validated instruments):
+${referenceExamples}
+
+RESEARCHER'S QUESTIONS:
+${userQuestions}
+
+Analyze each question for:
+- Is it specific enough? Vague questions like "How do you feel?" produce unreliable data. Good questions specify the construct, timeframe, and context (e.g., "I have been feeling sad or down" vs "How is your mood?")
+- Does it match the precision level of validated clinical instruments?
+- Could it be misinterpreted by participants?
+
+ONLY flag questions that genuinely need improvement. If a question is already specific and clear, do NOT suggest changes. Most well-written questions should pass.
+
+For each flagged question, provide a rewritten version that:
+- Keeps the same meaning and construct
+- Matches the style/tone of the original
+- Adds specificity (timeframe, context, behavioral anchors)
+
+Respond ONLY with valid JSON:
+{
+  "suggestions": [
+    {
+      "questionIndex": 0,
+      "originalPrompt": "the original question",
+      "suggestedPrompt": "the improved version",
+      "reason": "One sentence explaining what was vague and what you improved"
+    }
+  ]
+}
+
+If all questions are already specific enough, return an empty suggestions array.`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.2,
+  });
+
+  const result = JSON.parse(completion.choices[0].message.content!);
+  const suggestions: SpecificitySuggestion[] = (result.suggestions ?? []).filter(
+    (s: SpecificitySuggestion) => s.originalPrompt && s.suggestedPrompt && s.originalPrompt !== s.suggestedPrompt
+  );
+
+  return {
+    suggestions,
+    message: suggestions.length > 0
+      ? `${suggestions.length} question(s) could be more specific. Review the suggestions below.`
+      : "All questions are sufficiently specific.",
+  };
 }

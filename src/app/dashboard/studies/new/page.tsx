@@ -27,6 +27,8 @@ export default function NewStudyPage() {
   const [targetCount, setTargetCount] = useState("");
   const [compensation, setCompensation] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [analysisPhase, setAnalysisPhase] = useState<"idle" | "creating" | "specificity" | "reverse" | "done">("idle");
+  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [qualityResult, setQualityResult] = useState<{
     reversePairsDetected: number;
@@ -42,6 +44,11 @@ export default function NewStudyPage() {
     }>;
     message: string;
   } | null>(null);
+  const [specificityResult, setSpecificityResult] = useState<{
+    suggestions: Array<{ questionIndex: number; originalPrompt: string; suggestedPrompt: string; reason: string }>;
+    message: string;
+  } | null>(null);
+  const [acceptedSpecificity, setAcceptedSpecificity] = useState<Set<number>>(new Set());
   const [createdStudyId, setCreatedStudyId] = useState<string | null>(null);
   const [acceptedRecs, setAcceptedRecs] = useState<Set<string>>(new Set());
 
@@ -129,8 +136,15 @@ export default function NewStudyPage() {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    setAnalysisPhase("creating");
+    setAnalysisProgress(0);
 
     try {
+      // Phase 1: Create the study
+      const progressInterval = setInterval(() => {
+        setAnalysisProgress((p) => Math.min(p + 2, 90));
+      }, 200);
+
       const res = await fetch("/api/studies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -151,21 +165,78 @@ export default function NewStudyPage() {
         }),
       });
 
+      clearInterval(progressInterval);
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to create study");
       }
 
       const data = await res.json();
-      const qa = data.qualityAnalysis;
+      const studyId = data.study.id;
+      setCreatedStudyId(studyId);
+      setAnalysisProgress(100);
 
-      // Always show quality results before navigating
-      if (qa) {
-        setQualityResult(qa);
-        setCreatedStudyId(data.study.id);
-        // Scroll to first recommendation after React renders
-        if (qa.recommendations?.length > 0) {
-          const firstOriginal = qa.recommendations[0].originalPrompt;
+      // Phase 2: Specificity analysis
+      setAnalysisPhase("specificity");
+      setAnalysisProgress(0);
+      const specInterval = setInterval(() => {
+        setAnalysisProgress((p) => Math.min(p + 3, 90));
+      }, 200);
+
+      try {
+        const specRes = await fetch(`/api/studies/${studyId}/analyze-specificity`, { method: "POST" });
+        if (specRes.ok) {
+          const specData = await specRes.json();
+          if (specData.suggestions?.length > 0) {
+            setSpecificityResult(specData);
+            clearInterval(specInterval);
+            setAnalysisProgress(100);
+            // Scroll to first specificity suggestion
+            const firstIdx = specData.suggestions[0].questionIndex;
+            setTimeout(() => {
+              document.getElementById(`spec-${firstIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 200);
+            setAnalysisPhase("done");
+            setSubmitting(false);
+            return; // Stop here — reverse runs after specificity is resolved
+          }
+        }
+      } catch (err) {
+        console.error("Specificity check failed (non-fatal):", err);
+      }
+      clearInterval(specInterval);
+      setAnalysisProgress(100);
+
+      // Phase 3: Reverse-score analysis (only if no specificity issues)
+      await runReverseAnalysis(studyId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setAnalysisPhase("idle");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function runReverseAnalysis(studyId: string) {
+    setAnalysisPhase("reverse");
+    setAnalysisProgress(0);
+    const revInterval = setInterval(() => {
+      setAnalysisProgress((p) => Math.min(p + 3, 90));
+    }, 200);
+
+    try {
+      const revRes = await fetch(`/api/studies/${studyId}/analyze-reverse`, { method: "POST" });
+      clearInterval(revInterval);
+      setAnalysisProgress(100);
+
+      if (revRes.ok) {
+        const revData = await revRes.json();
+        setQualityResult(revData);
+        setAnalysisPhase("done");
+
+        if (revData.recommendations?.length > 0) {
+          const firstOriginal = revData.recommendations[0].originalPrompt;
           const idx = questions.findIndex((q) => q.prompt === firstOriginal);
           if (idx >= 0) {
             setTimeout(() => {
@@ -173,18 +244,60 @@ export default function NewStudyPage() {
             }, 200);
           }
         } else {
-          // No recommendations — scroll to the summary card
           setTimeout(() => {
             document.getElementById("quality-summary")?.scrollIntoView({ behavior: "smooth", block: "center" });
           }, 200);
         }
-      } else {
-        router.push(`/dashboard/studies/${data.study.id}`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setSubmitting(false);
+      clearInterval(revInterval);
+      console.error("Reverse analysis failed (non-fatal):", err);
+      setAnalysisPhase("done");
+    }
+  }
+
+  function acceptSpecificity(suggestion: NonNullable<typeof specificityResult>["suggestions"][number]) {
+    if (!createdStudyId) return;
+    setAcceptedSpecificity((prev) => new Set(prev).add(suggestion.questionIndex));
+
+    // Update the question in DB
+    fetch(`/api/studies/${createdStudyId}/add-question`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: questions[suggestion.questionIndex]?.type ?? "SCALE",
+        prompt: suggestion.suggestedPrompt,
+        order: suggestion.questionIndex + 1,
+        required: true,
+      }),
+    }).catch(console.error);
+
+    // Check if all specificity suggestions handled
+    const remaining = specificityResult?.suggestions.filter(
+      (s) => !acceptedSpecificity.has(s.questionIndex) && s.questionIndex !== suggestion.questionIndex
+    );
+    if (remaining && remaining.length > 0) {
+      setTimeout(() => {
+        document.getElementById(`spec-${remaining[0].questionIndex}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    } else if (createdStudyId) {
+      // All specificity handled — run reverse analysis
+      runReverseAnalysis(createdStudyId);
+    }
+  }
+
+  function dismissSpecificity(questionIndex: number) {
+    setAcceptedSpecificity((prev) => new Set(prev).add(questionIndex));
+
+    const remaining = specificityResult?.suggestions.filter(
+      (s) => !acceptedSpecificity.has(s.questionIndex) && s.questionIndex !== questionIndex
+    );
+    if (remaining && remaining.length > 0) {
+      setTimeout(() => {
+        document.getElementById(`spec-${remaining[0].questionIndex}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    } else if (createdStudyId) {
+      runReverseAnalysis(createdStudyId);
     }
   }
 
@@ -460,6 +573,52 @@ export default function NewStudyPage() {
                   )}
                 </div>
 
+                {/* Inline specificity suggestion */}
+                {(() => {
+                  const spec = specificityResult?.suggestions.find(
+                    (s) => s.questionIndex === i && !acceptedSpecificity.has(s.questionIndex)
+                  );
+                  if (!spec) return null;
+                  return (
+                    <div
+                      id={`spec-${i}`}
+                      className="border-2 border-blue-400 bg-blue-50 rounded-lg p-4 space-y-2 ml-6"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="h-8 w-8 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center text-sm font-medium shrink-0 mt-1">
+                          !
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <span className="text-xs font-medium text-blue-700 bg-blue-200 px-2 py-0.5 rounded">
+                            Specificity Improvement
+                          </span>
+                          <p className="font-medium text-blue-900">&ldquo;{spec.suggestedPrompt}&rdquo;</p>
+                          <p className="text-xs text-blue-600">{spec.reason}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 ml-11">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-blue-600 hover:bg-blue-500 text-white"
+                          onClick={() => acceptSpecificity(spec)}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="text-blue-600"
+                          onClick={() => dismissSpecificity(spec.questionIndex)}
+                        >
+                          Skip
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Inline recommendation card */}
                 {rec && (
                   <div
@@ -542,17 +701,52 @@ export default function NewStudyPage() {
             <p className="text-sm text-destructive text-center">{error}</p>
           )}
 
-          {submitting ? (
-            <div className="w-full space-y-2">
-              <div className="text-sm text-center text-muted-foreground font-medium">
-                Checking for reverse-score recommendations...
+          {submitting || analysisPhase !== "idle" ? (
+            <div className="w-full space-y-3">
+              {/* Specificity bar */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className={`font-medium ${analysisPhase === "specificity" ? "text-blue-700" : analysisPhase === "creating" ? "text-muted-foreground" : "text-green-700"}`}>
+                    {analysisPhase === "creating" ? "Creating study..." : analysisPhase === "specificity" ? "Checking question specificity..." : "Specificity check complete"}
+                  </span>
+                  {(analysisPhase === "creating" || analysisPhase === "specificity") && (
+                    <span className="text-muted-foreground">{analysisProgress}%</span>
+                  )}
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      analysisPhase === "creating" || analysisPhase === "specificity" ? "bg-blue-500" : "bg-green-500"
+                    }`}
+                    style={{ width: `${analysisPhase === "creating" || analysisPhase === "specificity" ? analysisProgress : 100}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-violet-500 rounded-full animate-pulse" style={{ width: "100%" }} />
-              </div>
+
+              {/* Reverse bar — only visible after specificity */}
+              {(analysisPhase === "reverse" || (analysisPhase === "done" && qualityResult)) && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className={`font-medium ${analysisPhase === "reverse" ? "text-violet-700" : "text-green-700"}`}>
+                      {analysisPhase === "reverse" ? "Checking for reverse-score recommendations..." : "Reverse-score check complete"}
+                    </span>
+                    {analysisPhase === "reverse" && (
+                      <span className="text-muted-foreground">{analysisProgress}%</span>
+                    )}
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        analysisPhase === "reverse" ? "bg-violet-500" : "bg-green-500"
+                      }`}
+                      style={{ width: `${analysisPhase === "reverse" ? analysisProgress : 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
-            <Button type="submit" size="lg" className="w-full" disabled={!!qualityResult}>
+            <Button type="submit" size="lg" className="w-full" disabled={!!qualityResult || !!specificityResult}>
               Create Study
             </Button>
           )}
