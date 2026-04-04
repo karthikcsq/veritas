@@ -420,17 +420,12 @@ export async function analyzeStructuredQuality(
 
 export async function recommendReverseQuestions(
   questions: Array<{ prompt: string; type: string; options?: string[] | null; config?: QuestionMeta["config"] }>
-): Promise<GeneratedReverseItem[]> {
-  // Only suggest for surveys with 5+ questions
-  if (questions.length < 5) return [];
+): Promise<{ existingPairCount: number; recommendations: GeneratedReverseItem[] }> {
+  if (questions.length < 5) {
+    return { existingPairCount: 0, recommendations: [] };
+  }
 
-  // Count how many existing questions look like they might already be reverse items
-  // (heuristic: if prompts contain opposing sentiment words)
-  const existingReverseCount = countLikelyExistingReversals(questions);
-  const needed = Math.max(0, Math.min(MAX_REVERSE_PAIRS, 2) - existingReverseCount);
-
-  if (needed === 0) return [];
-
+  // Step 1: Ask the AI to count existing natural reverse pairs AND suggest new ones in a single call
   const questionDescriptions = questions
     .map((q, i) => {
       let desc = `[Q${i + 1}] Type: ${q.type} | "${q.prompt}"`;
@@ -446,61 +441,50 @@ export async function recommendReverseQuestions(
     messages: [
       {
         role: "user",
-        content: `You are a clinical survey design expert. A researcher is creating a survey. Suggest ${needed} reverse-scored question(s) to add as attention checks.
+        content: `You are a psychometrics expert reviewing a clinical survey for data quality.
 
-A reverse-scored question measures the SAME thing as an existing question but with OPPOSITE meaning. If someone answers both the same way, they're not reading carefully.
-
-CURRENT QUESTIONS:
+QUESTIONS:
 ${questionDescriptions}
 
-RULES:
-- Generate exactly ${needed} reverse-scored question(s)
-- Each must clearly reverse one existing question's meaning
-- Use the same response format (type, scale) as the original
-- Place it away from the original (not adjacent)
-- It must read naturally as a real survey question
-- Pick the best candidates — questions about subjective feelings/states are ideal for reversal
+Do two things:
+
+1. COUNT how many existing question pairs are natural reverse-scored pairs — where one question is the conceptual opposite of another (e.g. "I feel sad" and "I am able to enjoy life" are reverses measuring mood). Only count CLEAR, UNAMBIGUOUS reversals.
+
+2. IF the survey has fewer than 2 natural reverse pairs, SUGGEST new reverse-scored questions to add (up to a total of 2 pairs). If it already has 2+, suggest nothing.
+
+A reverse-scored question measures the SAME construct as an existing question but with OPPOSITE meaning. Good candidates are subjective feelings/states. The reversal must read naturally.
 
 Respond ONLY with valid JSON:
 {
-  "items": [
+  "existingReversePairCount": 0,
+  "existingPairs": [
+    {"questionA": "Q3", "questionB": "Q7", "construct": "what they measure"}
+  ],
+  "newItems": [
     {
-      "originalQuestionId": "Q3",
+      "originalQuestionId": "Q5",
       "originalPrompt": "the original question text",
       "reversePrompt": "your reverse-scored question",
       "reverseType": "SCALE or MULTIPLE_CHOICE",
       "reverseOptions": null,
       "reverseConfig": null or {"scale": {"min": 0, "max": 4, "minLabel": "...", "maxLabel": "..."}},
-      "suggestedOrder": 7,
-      "explanation": "One sentence: what construct this checks and how the reversal works"
+      "suggestedOrder": 12,
+      "explanation": "One sentence on what construct this checks"
     }
   ]
-}`,
+}
+
+If the survey already has 2+ reverse pairs, return an empty newItems array.`,
       },
     ],
     response_format: { type: "json_object" },
-    temperature: 0.3,
+    temperature: 0.2,
   });
 
   const result = JSON.parse(completion.choices[0].message.content!);
-  return ((result.items ?? []) as GeneratedReverseItem[]).slice(0, needed);
-}
+  const existingCount = result.existingReversePairCount ?? 0;
+  const needed = Math.max(0, 2 - existingCount);
+  const recommendations = ((result.newItems ?? []) as GeneratedReverseItem[]).slice(0, needed);
 
-function countLikelyExistingReversals(
-  questions: Array<{ prompt: string }>
-): number {
-  // Simple heuristic: check if any pair of questions has opposing sentiment
-  const positiveWords = ["enjoy", "energy", "able", "satisfied", "well", "calm", "happy", "comfortable"];
-  const negativeWords = ["tired", "pain", "sad", "anxious", "difficult", "worry", "afraid", "weak", "meaningless"];
-
-  let positiveCount = 0;
-  let negativeCount = 0;
-  for (const q of questions) {
-    const lower = q.prompt.toLowerCase();
-    if (positiveWords.some((w) => lower.includes(w))) positiveCount++;
-    if (negativeWords.some((w) => lower.includes(w))) negativeCount++;
-  }
-
-  // If both positive and negative sentiment questions exist, some may already be reversals
-  return Math.min(positiveCount, negativeCount) > 0 ? 1 : 0;
+  return { existingPairCount: existingCount, recommendations };
 }
