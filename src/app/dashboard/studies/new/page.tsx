@@ -28,6 +28,13 @@ export default function NewStudyPage() {
   const [compensation, setCompensation] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [qualityResult, setQualityResult] = useState<{
+    reversePairsDetected: number;
+    reversePairs: Array<{ construct: string; relationship: string }>;
+    recommendations: Array<{ originalPrompt: string; reversePrompt: string; explanation: string; suggestedOrder: number }>;
+    message: string;
+  } | null>(null);
+  const [createdStudyId, setCreatedStudyId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<QuestionDraft[]>([
     { order: 1, type: "LONG_TEXT", prompt: "", required: true },
   ]);
@@ -105,6 +112,10 @@ export default function NewStudyPage() {
             order: q.order,
             type: q.type,
             prompt: q.prompt,
+            required: q.required,
+            options: q.options,
+            config: q.scaleConfig ? { scale: q.scaleConfig } : undefined,
+            dependsOn: q.dependsOn,
           })),
         }),
       });
@@ -115,7 +126,15 @@ export default function NewStudyPage() {
       }
 
       const data = await res.json();
-      router.push(`/dashboard/studies/${data.study.id}`);
+      const qa = data.qualityAnalysis;
+
+      // If there are recommendations, show them before navigating
+      if (qa?.recommendations?.length > 0) {
+        setQualityResult(qa);
+        setCreatedStudyId(data.study.id);
+      } else {
+        router.push(`/dashboard/studies/${data.study.id}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -403,6 +422,48 @@ export default function NewStudyPage() {
             {submitting ? "Creating..." : "Create Study"}
           </Button>
         </form>
+
+        {/* Quality Analysis Results */}
+        {qualityResult && createdStudyId && (
+          <Card className="border-2 border-violet-300 bg-violet-50">
+            <CardHeader>
+              <CardTitle className="text-lg">Quality Analysis</CardTitle>
+              <CardDescription>{qualityResult.message}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {qualityResult.reversePairsDetected > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Detected reverse-scored pairs:</p>
+                  {qualityResult.reversePairs.map((p, i) => (
+                    <div key={i} className="rounded border bg-white px-3 py-2 text-sm">
+                      <span className="font-medium">{p.construct}</span>
+                      <span className="text-muted-foreground"> — {p.relationship}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {qualityResult.recommendations.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Suggested attention check questions:</p>
+                  {qualityResult.recommendations.map((r, i) => (
+                    <div key={i} className="rounded border bg-white px-3 py-2 text-sm space-y-1">
+                      <p className="text-muted-foreground">For: &ldquo;{r.originalPrompt}&rdquo;</p>
+                      <p className="font-medium">Add: &ldquo;{r.reversePrompt}&rdquo;</p>
+                      <p className="text-xs text-muted-foreground">{r.explanation}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <Button onClick={() => router.push(`/dashboard/studies/${createdStudyId}`)} className="flex-1">
+                  Continue to Study
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

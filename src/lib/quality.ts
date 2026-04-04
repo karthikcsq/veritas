@@ -177,10 +177,11 @@ export async function detectAndStoreReversePairs(studyId: string): Promise<Store
   );
   const questions: QuestionMeta[] = questionsResult.rows;
 
-  // Only scale questions can be reverse-scored
-  const scaleQuestions = questions.filter(
-    (q) => q.type === "SCALE" && q.config?.scale
-  );
+  // Scale questions can be reverse-scored — default to 1-10 if no config
+  const scaleQuestions = questions.filter((q) => q.type === "SCALE").map((q) => ({
+    ...q,
+    config: q.config?.scale ? q.config : { scale: { min: 1, max: 10, minLabel: "low", maxLabel: "high" } },
+  }));
 
   if (scaleQuestions.length < 2) return [];
 
