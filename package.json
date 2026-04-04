@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -14,6 +14,7 @@
     "@prisma/client": "^7.6.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@worldcoin/idkit": "^4.0.11",
+    "@worldcoin/idkit-core": "^4.1.0",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  IDKitRequestWidget,
   orbLegacy,
   type IDKitResult,
   type RpContext,
@@ -22,13 +22,23 @@ interface PublicStudy {
 }
 
 interface RpSignatureResponse {
-  app_id: string;
+  app_id: `app_${string}`;
   rp_id: string;
   sig: string;
   nonce: string;
   created_at: number;
   expires_at: number;
 }
+
+const worldIdEnvironment =
+  process.env.NEXT_PUBLIC_WORLD_ID_ENV === "staging"
+    ? "staging"
+    : "production";
+
+const IDKitRequestWidget = dynamic(
+  () => import("@worldcoin/idkit").then((mod) => mod.IDKitRequestWidget),
+  { ssr: false }
+);
 
 export default function StudyEnrollPage() {
   const params = useParams<{ studyId: string }>();
@@ -41,8 +51,10 @@ export default function StudyEnrollPage() {
 
   const [loadingVerification, setLoadingVerification] = useState(false);
   const [widgetOpen, setWidgetOpen] = useState(false);
-  const [appId, setAppId] = useState<string | null>(null);
+  const [appId, setAppId] = useState<`app_${string}` | null>(null);
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
+
+  const orbPreset = useMemo(() => orbLegacy(), []);
 
   useEffect(() => {
     async function loadStudy() {
@@ -198,12 +210,13 @@ export default function StudyEnrollPage() {
               action={study.worldIdAction}
               rp_context={rpContext}
               allow_legacy_proofs={true}
-              preset={orbLegacy()}
-              environment={process.env.NODE_ENV === "development" ? "staging" : "production"}
+              preset={orbPreset}
+              environment={worldIdEnvironment}
               handleVerify={handleVerify}
               onSuccess={handleSuccess}
-              onError={() => {
-                setError("World ID verification was not completed.");
+              onError={(err) => {
+                console.error("IDKit error:", err);
+                setError(`World ID verification failed: ${String((err as { errorCode?: string }).errorCode ?? err)}`);
               }}
             />
           ) : null}

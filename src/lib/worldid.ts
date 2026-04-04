@@ -32,10 +32,13 @@ export function getWorldIdPublicConfig() {
 
 export function generateRpSignature(action: string): RpSignature {
   const { signingKey } = getWorldIdConfig();
-  const { sig, nonce, createdAt, expiresAt } = signRequest({
-    signingKeyHex: signingKey,
-    action,
-  });
+  const normalizedKey = signingKey.trim();
+
+  if (!normalizedKey) {
+    throw new Error("RP_SIGNING_KEY is empty");
+  }
+
+  const { sig, nonce, createdAt, expiresAt } = signRequest(action, normalizedKey);
 
   return {
     sig,
