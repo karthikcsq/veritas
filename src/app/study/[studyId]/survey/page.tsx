@@ -1,17 +1,71 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { QuestionType, ValidateResponseResponse } from "@/types";
+import type { QuestionType, QuestionDependency, QuestionConfig, ValidateResponseResponse } from "@/types";
+
+interface SurveyQuestion {
+  id: string;
+  order: number;
+  type: QuestionType;
+  prompt: string;
+  options?: string[];
+  required: boolean;
+  config?: QuestionConfig | null;
+  dependsOn?: QuestionDependency | null;
+}
 
 // Mock questions — replace with real data from enrollment
-const mockQuestions = [
-  { id: "q1", order: 1, type: "SCALE" as QuestionType, prompt: "On a scale of 1-10, how would you rate your average daily pain level?" },
-  { id: "q2", order: 2, type: "LONG_TEXT" as QuestionType, prompt: "Describe how your pain affects your daily activities." },
-  { id: "q3", order: 3, type: "MULTIPLE_CHOICE" as QuestionType, prompt: "Which pain management methods have you tried?", options: ["Physical therapy", "Medication", "Acupuncture", "Exercise", "None"] },
-  { id: "q4", order: 4, type: "LONG_TEXT" as QuestionType, prompt: "Describe your experience with prescription pain medication." },
+const mockQuestions: SurveyQuestion[] = [
+  { id: "q1", order: 1, type: "SCALE", prompt: "On a scale of 1-10, how would you rate your average daily pain level?", required: true, config: { scale: { min: 1, max: 10, minLabel: "No pain", maxLabel: "Worst pain" } } },
+  { id: "q2", order: 2, type: "LONG_TEXT", prompt: "Describe how your pain affects your daily activities.", required: true, dependsOn: { questionId: "q1", condition: "gte", value: 4 } },
+  { id: "q3", order: 3, type: "CHECKBOX", prompt: "Which pain management methods have you tried? (select all that apply)", required: true, options: ["Physical therapy", "Medication", "Acupuncture", "Exercise", "None"] },
+  { id: "q4", order: 4, type: "LONG_TEXT", prompt: "Describe your experience with prescription pain medication.", required: true, dependsOn: { questionId: "q3", condition: "includes", value: "Medication" } },
 ];
+
+function evaluateDependency(dep: QuestionDependency, answers: Record<string, string>): boolean {
+  const answer = answers[dep.questionId];
+  if (answer === undefined || answer === "") return false;
+
+  switch (dep.condition) {
+    case "equals":
+      return answer === String(dep.value);
+    case "not_equals":
+      return answer !== String(dep.value);
+    case "includes": {
+      try {
+        const selected: string[] = JSON.parse(answer);
+        return Array.isArray(dep.value)
+          ? (dep.value as string[]).some((v) => selected.includes(v))
+          : selected.includes(String(dep.value));
+      } catch {
+        return answer.includes(String(dep.value));
+      }
+    }
+    case "not_includes": {
+      try {
+        const selected: string[] = JSON.parse(answer);
+        return Array.isArray(dep.value)
+          ? !(dep.value as string[]).some((v) => selected.includes(v))
+          : !selected.includes(String(dep.value));
+      } catch {
+        return !answer.includes(String(dep.value));
+      }
+    }
+    case "gte":
+      return Number(answer) >= Number(dep.value);
+    case "lte":
+      return Number(answer) <= Number(dep.value);
+    case "between": {
+      const [min, max] = dep.value as [number, number];
+      const num = Number(answer);
+      return num >= min && num <= max;
+    }
+    default:
+      return true;
+  }
+}
 
 interface ValidityState {
   score: number;
@@ -26,10 +80,17 @@ export default function SurveyPage() {
   const [validating, setValidating] = useState(false);
   const [validity, setValidity] = useState<Record<string, ValidityState>>({});
 
-  const question = mockQuestions[currentIndex];
-  const isLast = currentIndex === mockQuestions.length - 1;
-  const progress = ((currentIndex + 1) / mockQuestions.length) * 100;
-  const currentValidity = validity[question.id];
+  const visibleQuestions = useMemo(() => {
+    return mockQuestions.filter((q) => {
+      if (!q.dependsOn) return true;
+      return evaluateDependency(q.dependsOn, answers);
+    });
+  }, [answers]);
+
+  const question = visibleQuestions[currentIndex];
+  const isLast = currentIndex === visibleQuestions.length - 1;
+  const progress = ((currentIndex + 1) / visibleQuestions.length) * 100;
+  const currentValidity = question ? validity[question.id] : undefined;
 
   function setAnswer(value: string) {
     setAnswers({ ...answers, [question.id]: value });
@@ -141,7 +202,7 @@ export default function SurveyPage() {
         {/* Progress */}
         <div className="space-y-1">
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Question {currentIndex + 1} of {mockQuestions.length}</span>
+            <span>Question {currentIndex + 1} of {visibleQuestions.length}</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -157,26 +218,40 @@ export default function SurveyPage() {
             <CardTitle className="text-lg">{question.prompt}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {question.type === "SCALE" && (
-              <div className="flex gap-2">
-                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setAnswer(String(n))}
-                    className={`h-10 w-10 rounded-lg border text-sm font-medium transition-colors ${
-                      answers[question.id] === String(n)
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-muted"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            )}
+            {question.type === "SCALE" && (() => {
+              const sc = question.config?.scale ?? { min: 1, max: 10 };
+              const step = sc.step ?? 1;
+              const values: number[] = [];
+              for (let n = sc.min; n <= sc.max; n += step) values.push(n);
+              return (
+                <div className="space-y-2">
+                  <div className="flex gap-2 flex-wrap">
+                    {values.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setAnswer(String(n))}
+                        className={`h-10 w-10 rounded-lg border text-sm font-medium transition-colors ${
+                          answers[question.id] === String(n)
+                            ? "bg-primary text-primary-foreground"
+                            : "hover:bg-muted"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  {(sc.minLabel || sc.maxLabel) && (
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{sc.minLabel ?? ""}</span>
+                      <span>{sc.maxLabel ?? ""}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
-            {(question.type === "LONG_TEXT" || question.type === "SHORT_TEXT") && (
+            {question.type === "LONG_TEXT" && (
               <textarea
                 className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm"
                 placeholder="Type your answer..."
@@ -185,9 +260,19 @@ export default function SurveyPage() {
               />
             )}
 
-            {question.type === "MULTIPLE_CHOICE" && "options" in question && (
+            {question.type === "SHORT_TEXT" && (
+              <input
+                type="text"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                placeholder="Type your answer..."
+                value={answers[question.id] || ""}
+                onChange={(e) => setAnswer(e.target.value)}
+              />
+            )}
+
+            {question.type === "MULTIPLE_CHOICE" && question.options && (
               <div className="space-y-2">
-                {(question.options as string[]).map((option) => (
+                {question.options.map((option) => (
                   <button
                     key={option}
                     type="button"
@@ -203,6 +288,44 @@ export default function SurveyPage() {
                 ))}
               </div>
             )}
+
+            {question.type === "CHECKBOX" && question.options && (() => {
+              const selected: string[] = (() => {
+                try { return JSON.parse(answers[question.id] || "[]"); }
+                catch { return []; }
+              })();
+              return (
+                <div className="space-y-2">
+                  {question.options.map((option) => {
+                    const isChecked = selected.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => {
+                          const next = isChecked
+                            ? selected.filter((s) => s !== option)
+                            : [...selected, option];
+                          setAnswer(JSON.stringify(next));
+                        }}
+                        className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors flex items-center gap-3 ${
+                          isChecked
+                            ? "bg-primary text-primary-foreground"
+                            : "hover:bg-muted"
+                        }`}
+                      >
+                        <span className={`h-4 w-4 rounded border flex items-center justify-center text-xs ${
+                          isChecked ? "bg-primary-foreground text-primary" : "border-current"
+                        }`}>
+                          {isChecked ? "\u2713" : ""}
+                        </span>
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {currentValidity && !currentValidity.dismissed && (
               <div

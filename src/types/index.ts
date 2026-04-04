@@ -1,6 +1,28 @@
 export type StudyStatus = "DRAFT" | "ACTIVE" | "CLOSED";
-export type QuestionType = "SHORT_TEXT" | "LONG_TEXT" | "MULTIPLE_CHOICE" | "SCALE";
+export type QuestionType = "SHORT_TEXT" | "LONG_TEXT" | "MULTIPLE_CHOICE" | "CHECKBOX" | "SCALE";
 export type EnrollmentStatus = "VERIFIED" | "IN_PROGRESS" | "COMPLETED" | "FLAGGED";
+
+// ---- Dependencies ----
+export type DependencyCondition = "equals" | "not_equals" | "includes" | "not_includes" | "gte" | "lte" | "between";
+
+export interface QuestionDependency {
+  questionId: string;
+  condition: DependencyCondition;
+  value: string | string[] | number | [number, number];
+}
+
+// ---- Question Config ----
+export interface ScaleConfig {
+  min: number;
+  max: number;
+  step?: number;
+  minLabel?: string;
+  maxLabel?: string;
+}
+
+export interface QuestionConfig {
+  scale?: ScaleConfig;
+}
 
 // ---- Auth ----
 export interface RegisterRequest {
@@ -33,6 +55,9 @@ export interface CreateStudyRequest {
     type: QuestionType;
     prompt: string;
     options?: string[];
+    required?: boolean;
+    config?: QuestionConfig;
+    dependsOn?: QuestionDependency;
   }>;
 }
 
@@ -59,6 +84,9 @@ export interface StudyDetail {
     type: QuestionType;
     prompt: string;
     options: unknown;
+    required: boolean;
+    config: QuestionConfig | null;
+    dependsOn: QuestionDependency | null;
   }>;
   enrollments: Array<{
     id: string;
