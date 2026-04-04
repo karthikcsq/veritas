@@ -500,7 +500,6 @@ Respond ONLY with valid JSON:
       "reverseType": "SCALE or MULTIPLE_CHOICE",
       "reverseOptions": null,
       "reverseConfig": null or {"scale": {"min": 0, "max": 4, "minLabel": "...", "maxLabel": "..."}},
-      "suggestedOrder": 12,
       "explanation": "One sentence on what construct this checks"
     }
   ]
@@ -516,7 +515,35 @@ If the survey already has 2+ reverse pairs, return an empty newItems array.`,
   const result = JSON.parse(completion.choices[0].message.content!);
   const existingCount = result.existingReversePairCount ?? 0;
   const needed = Math.max(0, 2 - existingCount);
-  const recommendations = ((result.newItems ?? []) as GeneratedReverseItem[]).slice(0, needed);
+  const rawItems = ((result.newItems ?? []) as GeneratedReverseItem[]).slice(0, needed);
+
+  // Compute suggestedOrder with math — place at least 2 positions away from original, within bounds
+  const totalQuestions = questions.length;
+  const usedOrders = new Set<number>();
+  const recommendations = rawItems.map((item) => {
+    const originalIdx = questions.findIndex((q) => q.prompt === item.originalPrompt);
+    const originalOrder = originalIdx >= 0 ? originalIdx + 1 : 1;
+
+    // Pick a random position at least 2 away from original, within [1, totalQuestions]
+    const candidates: number[] = [];
+    for (let o = 1; o <= totalQuestions; o++) {
+      if (Math.abs(o - originalOrder) >= 2 && !usedOrders.has(o)) {
+        candidates.push(o);
+      }
+    }
+    // Fallback: if no good candidates, just pick the furthest available
+    if (candidates.length === 0) {
+      for (let o = 1; o <= totalQuestions; o++) {
+        if (o !== originalOrder && !usedOrders.has(o)) candidates.push(o);
+      }
+    }
+    const suggestedOrder = candidates.length > 0
+      ? candidates[Math.floor(Math.random() * candidates.length)]
+      : totalQuestions;
+    usedOrders.add(suggestedOrder);
+
+    return { ...item, suggestedOrder };
+  });
 
   return { existingPairCount: existingCount, recommendations };
 }

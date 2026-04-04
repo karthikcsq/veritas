@@ -289,8 +289,9 @@ export default function NewStudyPage() {
         setAnalysisPhase("done");
 
         if (revData.recommendations?.length > 0) {
-          const firstOriginal = revData.recommendations[0].originalPrompt;
-          const idx = questions.findIndex((q) => q.prompt === firstOriginal);
+          const maxOrder = questions.length;
+          const firstClampedOrder = Math.min(revData.recommendations[0].suggestedOrder, maxOrder);
+          const idx = questions.findIndex((q) => q.order === firstClampedOrder);
           if (idx >= 0) {
             setTimeout(() => {
               document.getElementById(`rec-${idx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -449,8 +450,13 @@ export default function NewStudyPage() {
             <CardContent className="space-y-4">
               {questions.map((q, i) => {
                 // Find recommendation that targets this question's order position
+                // Clamp suggestedOrder to valid range (AI sometimes suggests order > question count)
+                const maxOrder = questions.length;
                 const rec = qualityResult?.recommendations.find(
-                  (r) => r.suggestedOrder === q.order && !acceptedRecs.has(r.originalPrompt)
+                  (r) => {
+                    const clampedOrder = Math.min(r.suggestedOrder, maxOrder);
+                    return clampedOrder === q.order && !acceptedRecs.has(r.originalPrompt);
+                  }
                 );
                 const recPair = rec ? qualityResult?.reversePairs.find(
                   (p) => qualityResult?.recommendations.some(
