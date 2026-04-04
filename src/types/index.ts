@@ -1,4 +1,6 @@
-import { StudyStatus, QuestionType, EnrollmentStatus } from "@/generated/prisma";
+export type StudyStatus = "DRAFT" | "ACTIVE" | "CLOSED";
+export type QuestionType = "SHORT_TEXT" | "LONG_TEXT" | "MULTIPLE_CHOICE" | "SCALE";
+export type EnrollmentStatus = "VERIFIED" | "IN_PROGRESS" | "COMPLETED" | "FLAGGED";
 
 // ---- Auth ----
 export interface RegisterRequest {

@@ -4,7 +4,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Researcher {
@@ -100,6 +102,15 @@ model Response {
   enrollment   Enrollment    @relation(fields: [enrollmentId], references: [id])
   question     Question      @relation(fields: [questionId], references: [id])
   qualityScore QualityScore?
+}
+
+model Nullifier {
+  id         String   @id @default(cuid())
+  nullifier  String
+  action     String
+  verifiedAt DateTime @default(now())
+
+  @@unique([nullifier, action])
 }
 
 model QualityScore {

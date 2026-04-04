@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { pool } from "@/lib/db";
 
 interface OnboardingRequest {
   name?: string;
@@ -22,10 +22,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
-  await prisma.researcher.update({
-    where: { id: researcherId },
-    data: { name },
-  });
+  await pool.query(
+    'UPDATE "Researcher" SET "name" = $1 WHERE "id" = $2',
+    [name, researcherId]
+  );
 
   return NextResponse.json({ success: true });
 }

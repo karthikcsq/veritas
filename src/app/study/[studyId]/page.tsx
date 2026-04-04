@@ -1,13 +1,13 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
 import {
+  IDKitRequestWidget,
   orbLegacy,
   type IDKitResult,
   type RpContext,
 } from "@worldcoin/idkit";
+import { useCallback, useRef, useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,24 +21,34 @@ interface PublicStudy {
   worldIdAction: string;
 }
 
-interface RpSignatureResponse {
-  app_id: `app_${string}`;
-  rp_id: string;
-  sig: string;
-  nonce: string;
-  created_at: number;
-  expires_at: number;
+const DEFAULT_APP_ID = process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}` | undefined;
+
+async function getRpContext(action: string): Promise<{ rp_id: string } & RpContext> {
+  const res = await fetch("/api/world-id/rp-signature", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof err === "object" && err && "error" in err
+        ? String((err as { error: string }).error)
+        : "Failed to get RP signature",
+    );
+  }
+
+  const rpSig = await res.json();
+
+  return {
+    rp_id: rpSig.rp_id,
+    nonce: rpSig.nonce,
+    created_at: rpSig.created_at,
+    expires_at: rpSig.expires_at,
+    signature: rpSig.sig,
+  };
 }
-
-const worldIdEnvironment =
-  process.env.NEXT_PUBLIC_WORLD_ID_ENV === "staging"
-    ? "staging"
-    : "production";
-
-const IDKitRequestWidget = dynamic(
-  () => import("@worldcoin/idkit").then((mod) => mod.IDKitRequestWidget),
-  { ssr: false }
-);
 
 export default function StudyEnrollPage() {
   const params = useParams<{ studyId: string }>();
@@ -49,12 +59,12 @@ export default function StudyEnrollPage() {
   const [loadingStudy, setLoadingStudy] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [loadingVerification, setLoadingVerification] = useState(false);
-  const [widgetOpen, setWidgetOpen] = useState(false);
-  const [appId, setAppId] = useState<`app_${string}` | null>(null);
+  const [open, setOpen] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const rpContextRef = useRef<RpContext | null>(null);
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
 
-  const orbPreset = useMemo(() => orbLegacy(), []);
+  const preset = orbLegacy();
 
   useEffect(() => {
     async function loadStudy() {
@@ -79,58 +89,51 @@ export default function StudyEnrollPage() {
     }
   }, [studyId]);
 
-  async function startVerification() {
-    if (!study) return;
+  const verifyOnBackend = useCallback(
+    async (result: IDKitResult) => {
+      const response = await fetch(`/api/studies/${studyId}/enroll`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          idkitResponse: result,
+        }),
+      });
 
-    setLoadingVerification(true);
+      if (!response.ok) {
+        throw new Error("Backend verification failed");
+      }
+    },
+    [studyId],
+  );
+
+  const startVerification = async () => {
+    if (!study || !DEFAULT_APP_ID) return;
+
+    setStarting(true);
     setError(null);
 
     try {
-      const signatureResponse = await fetch("/api/world-id/rp-signature", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: study.worldIdAction }),
-      });
-
-      if (!signatureResponse.ok) {
-        throw new Error("Could not initialize World ID verification");
-      }
-
-      const rpSignature = (await signatureResponse.json()) as RpSignatureResponse;
-      setAppId(rpSignature.app_id);
-      setRpContext({
-        rp_id: rpSignature.rp_id,
-        nonce: rpSignature.nonce,
-        created_at: rpSignature.created_at,
-        expires_at: rpSignature.expires_at,
-        signature: rpSignature.sig,
-      });
-      setWidgetOpen(true);
-    } catch (err) {
-      console.error(err);
+      const ctx = await getRpContext(study.worldIdAction);
+      rpContextRef.current = ctx;
+      setRpContext(ctx);
+      setOpen(true);
+    } catch (e) {
+      console.error(e);
+      rpContextRef.current = null;
+      setRpContext(null);
       setError("Failed to start verification. Please try again.");
     } finally {
-      setLoadingVerification(false);
+      setStarting(false);
     }
-  }
+  };
 
-  async function handleVerify(result: IDKitResult) {
-    const response = await fetch(`/api/studies/${studyId}/enroll`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        idkitResponse: result,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Backend verification failed");
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      rpContextRef.current = null;
+      setRpContext(null);
     }
-  }
-
-  function handleSuccess() {
-    router.push(`/study/${studyId}/survey`);
-  }
+  };
 
   if (loadingStudy) {
     return (
@@ -194,29 +197,26 @@ export default function StudyEnrollPage() {
             size="lg"
             className="w-full"
             onClick={startVerification}
-            disabled={loadingVerification}
+            disabled={starting}
           >
-            Verify with World ID to Enroll
+            {starting ? "Preparing…" : "Verify with World ID to Enroll"}
           </Button>
           {error ? (
             <p className="text-sm text-center text-destructive">{error}</p>
           ) : null}
 
-          {appId && rpContext ? (
+          {DEFAULT_APP_ID && rpContext && study ? (
             <IDKitRequestWidget
-              open={widgetOpen}
-              onOpenChange={setWidgetOpen}
-              app_id={appId}
+              open={open}
+              onOpenChange={onOpenChange}
+              app_id={DEFAULT_APP_ID}
               action={study.worldIdAction}
               rp_context={rpContext}
-              allow_legacy_proofs={true}
-              preset={orbPreset}
-              environment={worldIdEnvironment}
-              handleVerify={handleVerify}
-              onSuccess={handleSuccess}
-              onError={(err) => {
-                console.error("IDKit error:", err);
-                setError(`World ID verification failed: ${String((err as { errorCode?: string }).errorCode ?? err)}`);
+              allow_legacy_proofs
+              preset={preset}
+              handleVerify={verifyOnBackend}
+              onSuccess={() => {
+                router.push(`/study/${studyId}/survey`);
               }}
             />
           ) : null}

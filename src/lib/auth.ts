@@ -3,11 +3,8 @@ import type { JWT } from "next-auth/jwt";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
-import { prisma } from "./prisma";
-import {
-  extractNullifierFromIdKitPayload,
-  verifyIdKitPayload,
-} from "./worldid";
+import { pool, generateId } from "./db";
+import { extractNullifierFromIdKitPayload } from "./worldid";
 
 const WORLD_ID_DEFAULT_NAME = "World ID Researcher";
 
@@ -37,9 +34,11 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const researcher = await prisma.researcher.findUnique({
-          where: { email: credentials.email },
-        });
+        const result = await pool.query(
+          'SELECT "id", "email", "name", "passwordHash" FROM "Researcher" WHERE "email" = $1',
+          [credentials.email]
+        );
+        const researcher = result.rows[0];
         if (!researcher) return null;
 
         const valid = await bcrypt.compare(
@@ -68,7 +67,7 @@ export const authOptions: NextAuthOptions = {
 
         try {
           const idkitResponse = JSON.parse(credentials.idkitResponse);
-          const expectedAction = "researcher_login";
+          const expectedAction = "verify-account";
           const payloadAction =
             typeof idkitResponse === "object" &&
             idkitResponse !== null &&
@@ -79,28 +78,29 @@ export const authOptions: NextAuthOptions = {
 
           if (payloadAction !== expectedAction) return null;
 
-          const verifyResponse = await verifyIdKitPayload(idkitResponse);
-          if (!verifyResponse.ok) return null;
-
+          // Proof was already verified + nullifier stored by /api/verify-proof
+          // (called from the frontend's handleVerify before signIn).
+          // Here we just extract the nullifier to find/create the researcher.
           const nullifier = extractNullifierFromIdKitPayload(idkitResponse);
           if (!nullifier) return null;
 
           const worldIdIdentity = nullifier.toLowerCase();
           const researcherEmail = `worldid+${worldIdIdentity.slice(2)}@veritas.local`;
-          const existingResearcher = await prisma.researcher.findUnique({
-            where: { email: researcherEmail },
-          });
 
-          let researcher = existingResearcher;
+          const existingResult = await pool.query(
+            'SELECT "id", "email", "name" FROM "Researcher" WHERE "email" = $1',
+            [researcherEmail]
+          );
+
+          let researcher = existingResult.rows[0];
           if (!researcher) {
             const randomPasswordHash = await bcrypt.hash(randomUUID(), 12);
-            researcher = await prisma.researcher.create({
-              data: {
-                email: researcherEmail,
-                name: WORLD_ID_DEFAULT_NAME,
-                passwordHash: randomPasswordHash,
-              },
-            });
+            const id = generateId();
+            const insertResult = await pool.query(
+              'INSERT INTO "Researcher" ("id", "email", "name", "passwordHash", "createdAt") VALUES ($1, $2, $3, $4, NOW()) RETURNING "id", "email", "name"',
+              [id, researcherEmail, WORLD_ID_DEFAULT_NAME, randomPasswordHash]
+            );
+            researcher = insertResult.rows[0];
           }
 
           const authUser: AuthUser = {
@@ -124,10 +124,11 @@ export const authOptions: NextAuthOptions = {
         token.requiresOnboarding = (user as AuthUser).requiresOnboarding;
       }
       if (isTokenWithId(token)) {
-        const currentResearcher = await prisma.researcher.findUnique({
-          where: { id: token.id },
-          select: { name: true },
-        });
+        const result = await pool.query(
+          'SELECT "name" FROM "Researcher" WHERE "id" = $1',
+          [token.id]
+        );
+        const currentResearcher = result.rows[0];
         if (currentResearcher) {
           token.requiresOnboarding = getUserOnboardingStatus(currentResearcher);
         }

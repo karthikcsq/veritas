@@ -1,12 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  webpack: (config) => {
-    config.module.rules.push({
-      test: /\.wasm$/,
-      type: "asset/resource",
-    });
-    return config;
-  },
+  serverExternalPackages: ["@worldcoin/idkit-core", "@worldcoin/idkit"],
+  turbopack: {},
 };
 
 export default nextConfig;

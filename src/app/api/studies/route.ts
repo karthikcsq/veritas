@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { pool, generateId } from "@/lib/db";
 import type { CreateStudyRequest } from "@/types";
 
 export async function POST(req: Request) {
@@ -11,37 +11,46 @@ export async function POST(req: Request) {
   }
 
   const body: CreateStudyRequest = await req.json();
-  const researcherId = (session.user as any).id;
+  const researcherId = (session.user as { id: string }).id;
 
-  const study = await prisma.study.create({
-    data: {
-      researcherId,
-      title: body.title,
-      description: body.description,
-      targetCount: body.targetCount,
-      compensationUsd: body.compensationUsd,
-      questions: {
-        create: body.questions.map((q) => ({
-          order: q.order,
-          type: q.type,
-          prompt: q.prompt,
-          options: q.options ?? undefined,
-        })),
-      },
-    },
-  });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
 
-  return NextResponse.json(
-    {
-      study: {
-        id: study.id,
-        title: study.title,
-        status: study.status,
-        worldIdAction: `study_enrollment_${study.id}`,
+    const studyId = generateId();
+    const studyResult = await client.query(
+      'INSERT INTO "Study" ("id", "researcherId", "title", "description", "status", "targetCount", "compensationUsd", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) RETURNING "id", "title", "status"',
+      [studyId, researcherId, body.title, body.description, "DRAFT", body.targetCount, body.compensationUsd]
+    );
+    const study = studyResult.rows[0];
+
+    for (const q of body.questions) {
+      const questionId = generateId();
+      await client.query(
+        'INSERT INTO "Question" ("id", "studyId", "order", "type", "prompt", "options") VALUES ($1, $2, $3, $4, $5, $6)',
+        [questionId, studyId, q.order, q.type, q.prompt, q.options ? JSON.stringify(q.options) : null]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return NextResponse.json(
+      {
+        study: {
+          id: study.id,
+          title: study.title,
+          status: study.status,
+          worldIdAction: `study_enrollment_${study.id}`,
+        },
       },
-    },
-    { status: 201 }
-  );
+      { status: 201 }
+    );
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 export async function GET() {
@@ -50,31 +59,34 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const researcherId = (session.user as any).id;
+  const researcherId = (session.user as { id: string }).id;
 
-  const studies = await prisma.study.findMany({
-    where: { researcherId },
-    include: {
-      _count: {
-        select: { enrollments: true },
-      },
-      enrollments: {
-        select: { status: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const result = await pool.query(
+    `SELECT
+      s."id",
+      s."title",
+      s."status",
+      s."targetCount",
+      COUNT(e."id") AS "enrollmentCount",
+      COUNT(CASE WHEN e."status" = 'COMPLETED' THEN 1 END) AS "completedCount",
+      COUNT(CASE WHEN e."status" = 'FLAGGED' THEN 1 END) AS "flaggedCount"
+    FROM "Study" s
+    LEFT JOIN "Enrollment" e ON e."studyId" = s."id"
+    WHERE s."researcherId" = $1
+    GROUP BY s."id", s."title", s."status", s."targetCount", s."createdAt"
+    ORDER BY s."createdAt" DESC`,
+    [researcherId]
+  );
 
   return NextResponse.json({
-    studies: studies.map((s) => ({
+    studies: result.rows.map((s) => ({
       id: s.id,
       title: s.title,
       status: s.status,
       targetCount: s.targetCount,
-      enrollmentCount: s._count.enrollments,
-      completedCount: s.enrollments.filter((e) => e.status === "COMPLETED")
-        .length,
-      flaggedCount: s.enrollments.filter((e) => e.status === "FLAGGED").length,
+      enrollmentCount: parseInt(s.enrollmentCount, 10),
+      completedCount: parseInt(s.completedCount, 10),
+      flaggedCount: parseInt(s.flaggedCount, 10),
     })),
   });
 }
