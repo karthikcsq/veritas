@@ -90,8 +90,6 @@ export default function LoginPage() {
       }
 
       const rpSignature = (await response.json()) as RpSignatureResponse;
-      console.log(rpSignature)
-      // setAppId(rpSignature.app_id);
       setRpContext({
         rp_id: rpSignature.rp_id,
         nonce: rpSignature.nonce,
@@ -123,8 +121,6 @@ export default function LoginPage() {
   async function handleSuccess() {
     await routeAfterLogin();
   }
-
-  console.log(appId, rpContext);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
