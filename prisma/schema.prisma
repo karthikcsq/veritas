@@ -25,6 +25,7 @@ model Study {
   title           String
   description     String
   status          StudyStatus @default(DRAFT)
+  publiclyListed  Boolean     @default(false)
   targetCount     Int
   compensationUsd Float
   createdAt       DateTime    @default(now())

@@ -17,11 +17,10 @@ export async function GET(
     return NextResponse.json({ error: "Study not found" }, { status: 404 });
   }
 
-  const countResult = await pool.query(
-    'SELECT COUNT(*) AS "questionCount" FROM "Question" WHERE "studyId" = $1',
+  const questionsResult = await pool.query(
+    'SELECT "id", "order", "type", "prompt", "options" FROM "Question" WHERE "studyId" = $1 ORDER BY "order" ASC',
     [studyId]
   );
-  const questionCount = parseInt(countResult.rows[0].questionCount, 10);
 
   return NextResponse.json({
     study: {
@@ -29,8 +28,15 @@ export async function GET(
       title: study.title,
       description: study.description,
       compensationUsd: study.compensationUsd,
-      questionCount,
+      questionCount: questionsResult.rows.length,
       worldIdAction: `study_enrollment_${study.id}`,
+      questions: questionsResult.rows.map((q) => ({
+        id: q.id,
+        order: q.order,
+        type: q.type,
+        prompt: q.prompt,
+        options: q.options,
+      })),
     },
   });
 }

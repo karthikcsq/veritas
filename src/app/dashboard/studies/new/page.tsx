@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,10 +15,13 @@ interface QuestionDraft {
 }
 
 export default function NewStudyPage() {
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [targetCount, setTargetCount] = useState("");
   const [compensation, setCompensation] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<QuestionDraft[]>([
     { order: 1, type: "LONG_TEXT", prompt: "" },
   ]);
@@ -41,23 +45,52 @@ export default function NewStudyPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // TODO: POST /api/studies
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/studies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description,
+          targetCount: parseInt(targetCount, 10),
+          compensationUsd: parseFloat(compensation),
+          questions: questions.map((q) => ({
+            order: q.order,
+            type: q.type,
+            prompt: q.prompt,
+          })),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to create study");
+      }
+
+      const data = await res.json();
+      router.push(`/dashboard/studies/${data.study.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <header className="border-b bg-background px-6 py-4">
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard">
-            <Button variant="ghost" size="sm">
-              &larr; Back
-            </Button>
-          </Link>
-          <h1 className="font-semibold">Create New Study</h1>
-        </div>
-      </header>
+    <div className="px-6 py-8">
+      <div className="flex items-center gap-4 mb-6">
+        <Link href="/dashboard">
+          <Button variant="ghost" size="sm">
+            &larr; Back
+          </Button>
+        </Link>
+        <h1 className="font-semibold text-lg">Create New Study</h1>
+      </div>
 
-      <div className="max-w-2xl mx-auto px-6 py-8">
+      <div className="max-w-2xl mx-auto">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Study info */}
           <Card>
@@ -172,8 +205,12 @@ export default function NewStudyPage() {
             </CardContent>
           </Card>
 
-          <Button type="submit" size="lg" className="w-full">
-            Create Study
+          {error && (
+            <p className="text-sm text-destructive text-center">{error}</p>
+          )}
+
+          <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+            {submitting ? "Creating..." : "Create Study"}
           </Button>
         </form>
       </div>

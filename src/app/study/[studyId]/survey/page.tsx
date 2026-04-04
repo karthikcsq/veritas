@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { QuestionType, ValidateResponseResponse } from "@/types";
 
-// Mock questions — replace with real data from enrollment
-const mockQuestions = [
-  { id: "q1", order: 1, type: "SCALE" as QuestionType, prompt: "On a scale of 1-10, how would you rate your average daily pain level?" },
-  { id: "q2", order: 2, type: "LONG_TEXT" as QuestionType, prompt: "Describe how your pain affects your daily activities." },
-  { id: "q3", order: 3, type: "MULTIPLE_CHOICE" as QuestionType, prompt: "Which pain management methods have you tried?", options: ["Physical therapy", "Medication", "Acupuncture", "Exercise", "None"] },
-  { id: "q4", order: 4, type: "LONG_TEXT" as QuestionType, prompt: "Describe your experience with prescription pain medication." },
-];
+interface Question {
+  id: string;
+  order: number;
+  type: QuestionType;
+  prompt: string;
+  options?: string[];
+}
 
 interface ValidityState {
   score: number;
@@ -20,18 +21,49 @@ interface ValidityState {
 }
 
 export default function SurveyPage() {
+  const { studyId } = useParams<{ studyId: string }>();
+  const searchParams = useSearchParams();
+  const enrollmentId = searchParams.get("enrollmentId");
+
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [timeStarted, setTimeStarted] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validity, setValidity] = useState<Record<string, ValidityState>>({});
 
-  const question = mockQuestions[currentIndex];
-  const isLast = currentIndex === mockQuestions.length - 1;
-  const progress = ((currentIndex + 1) / mockQuestions.length) * 100;
-  const currentValidity = validity[question.id];
+  useEffect(() => {
+    async function loadQuestions() {
+      try {
+        const res = await fetch(`/api/studies/${studyId}/public`);
+        if (res.ok) {
+          const data = await res.json();
+          const qs = (data.study.questions ?? []).map((q: Question) => ({
+            ...q,
+            options: typeof q.options === "string" ? JSON.parse(q.options) : q.options,
+          }));
+          setQuestions(qs);
+          if (qs.length > 0) {
+            setTimeStarted({ [qs[0].id]: Date.now() });
+          }
+        }
+      } finally {
+        setLoadingQuestions(false);
+      }
+    }
+    if (studyId) loadQuestions();
+  }, [studyId]);
+
+  const question = questions[currentIndex];
+  const isLast = currentIndex === questions.length - 1;
+  const progress = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
+  const currentValidity = question ? validity[question.id] : undefined;
 
   function setAnswer(value: string) {
+    if (!question) return;
     setAnswers({ ...answers, [question.id]: value });
     if (validity[question.id]) {
       setValidity((prev) => {
@@ -42,7 +74,47 @@ export default function SurveyPage() {
     }
   }
 
+  function advanceToNext() {
+    if (isLast) {
+      submitResponses();
+    } else {
+      const nextQ = questions[currentIndex + 1];
+      setTimeStarted((prev) => ({ ...prev, [nextQ.id]: Date.now() }));
+      setCurrentIndex((i) => i + 1);
+    }
+  }
+
+  async function submitResponses() {
+    if (!enrollmentId) {
+      setSubmitted(true);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const now = Date.now();
+      const responsePayload = questions.map((q) => ({
+        questionId: q.id,
+        value: answers[q.id] ?? "",
+        timeSpentMs: now - (timeStarted[q.id] ?? now),
+      }));
+
+      const res = await fetch(`/api/enrollments/${enrollmentId}/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ responses: responsePayload }),
+      });
+
+      if (res.ok) {
+        setSubmitted(true);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const validateAndProceed = useCallback(async () => {
+    if (!question) return;
     const answer = answers[question.id];
     if (!answer) return;
 
@@ -50,21 +122,13 @@ export default function SurveyPage() {
       question.type === "LONG_TEXT" || question.type === "SHORT_TEXT";
 
     if (!needsLlmCheck) {
-      if (isLast) {
-        setSubmitted(true);
-      } else {
-        setCurrentIndex((i) => i + 1);
-      }
+      advanceToNext();
       return;
     }
 
     const existing = validity[question.id];
     if (existing?.dismissed) {
-      if (isLast) {
-        setSubmitted(true);
-      } else {
-        setCurrentIndex((i) => i + 1);
-      }
+      advanceToNext();
       return;
     }
 
@@ -81,7 +145,7 @@ export default function SurveyPage() {
       });
       const data: ValidateResponseResponse = await res.json();
 
-      if (data.score < 50) {
+      if (data.score < 40) {
         setValidity((prev) => ({
           ...prev,
           [question.id]: {
@@ -91,33 +155,42 @@ export default function SurveyPage() {
           },
         }));
       } else {
-        if (isLast) {
-          setSubmitted(true);
-        } else {
-          setCurrentIndex((i) => i + 1);
-        }
+        advanceToNext();
       }
     } catch {
-      if (isLast) {
-        setSubmitted(true);
-      } else {
-        setCurrentIndex((i) => i + 1);
-      }
+      advanceToNext();
     } finally {
       setValidating(false);
     }
-  }, [answers, question, isLast, validity]);
+  }, [answers, question, isLast, validity, questions, currentIndex, timeStarted, enrollmentId]);
 
   function dismissWarning() {
+    if (!question) return;
     setValidity((prev) => ({
       ...prev,
       [question.id]: { ...prev[question.id], dismissed: true },
     }));
   }
 
+  if (loadingQuestions) {
+    return (
+      <div className="flex-1 flex items-center justify-center px-4">
+        <p className="text-sm text-muted-foreground">Loading survey...</p>
+      </div>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center px-4">
+        <p className="text-sm text-destructive">No questions found for this study.</p>
+      </div>
+    );
+  }
+
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-muted/30">
+      <div className="flex-1 flex items-center justify-center px-4">
         <Card className="w-full max-w-md text-center">
           <CardContent className="pt-8 pb-8 space-y-4">
             <div className="mx-auto h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
@@ -136,12 +209,11 @@ export default function SurveyPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-muted/30">
+    <div className="flex-1 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-lg space-y-4">
-        {/* Progress */}
         <div className="space-y-1">
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Question {currentIndex + 1} of {mockQuestions.length}</span>
+            <span>Question {currentIndex + 1} of {questions.length}</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -185,9 +257,9 @@ export default function SurveyPage() {
               />
             )}
 
-            {question.type === "MULTIPLE_CHOICE" && "options" in question && (
+            {question.type === "MULTIPLE_CHOICE" && question.options && (
               <div className="space-y-2">
-                {(question.options as string[]).map((option) => (
+                {question.options.map((option) => (
                   <button
                     key={option}
                     type="button"
@@ -205,27 +277,17 @@ export default function SurveyPage() {
             )}
 
             {currentValidity && !currentValidity.dismissed && (
-              <div
-                className={`rounded-lg border px-4 py-3 text-sm ${
-                  currentValidity.score < 30
-                    ? "border-red-300 bg-red-50 text-red-800"
-                    : "border-yellow-300 bg-yellow-50 text-yellow-800"
-                }`}
-              >
+              <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
                 <p className="font-medium">
-                  {currentValidity.score < 30
-                    ? "Your answer doesn\u2019t seem to address this question."
-                    : "Your answer may not fully address this question."}
+                  {currentValidity.score < 20
+                    ? "Hmm, this doesn\u2019t seem related to the question \u2014 mind taking another look?"
+                    : "Just a heads up \u2014 your answer might not fully cover what\u2019s being asked."}
                 </p>
                 <p className="mt-1 text-xs opacity-80">
                   {currentValidity.explanation}
                 </p>
                 <div className="mt-2 flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={dismissWarning}
-                  >
+                  <Button size="sm" variant="outline" onClick={dismissWarning}>
                     Keep my answer
                   </Button>
                 </div>
@@ -242,13 +304,15 @@ export default function SurveyPage() {
               </Button>
               <Button
                 onClick={validateAndProceed}
-                disabled={!answers[question.id] || validating}
+                disabled={!answers[question.id] || validating || submitting}
               >
                 {validating
                   ? "Checking..."
-                  : isLast
-                    ? "Submit"
-                    : "Next"}
+                  : submitting
+                    ? "Submitting..."
+                    : isLast
+                      ? "Submit"
+                      : "Next"}
               </Button>
             </div>
           </CardContent>
