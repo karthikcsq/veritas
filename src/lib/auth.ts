@@ -67,20 +67,7 @@ export const authOptions: NextAuthOptions = {
 
         try {
           const idkitResponse = JSON.parse(credentials.idkitResponse);
-          const expectedAction = "verify-account";
-          const payloadAction =
-            typeof idkitResponse === "object" &&
-            idkitResponse !== null &&
-            "action" in idkitResponse &&
-            typeof (idkitResponse as { action?: unknown }).action === "string"
-              ? (idkitResponse as { action: string }).action
-              : null;
 
-          if (payloadAction !== expectedAction) return null;
-
-          // Proof was already verified + nullifier stored by /api/verify-proof
-          // (called from the frontend's handleVerify before signIn).
-          // Here we just extract the nullifier to find/create the researcher.
           const nullifier = extractNullifierFromIdKitPayload(idkitResponse);
           if (!nullifier) return null;
 

@@ -1,17 +1,63 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { QuestionType, ValidateResponseResponse } from "@/types";
+import type { QuestionType, QuestionDependency, QuestionConfig, ValidateResponseResponse } from "@/types";
 
-interface Question {
+interface SurveyQuestion {
   id: string;
   order: number;
   type: QuestionType;
   prompt: string;
   options?: string[];
+  required: boolean;
+  config?: QuestionConfig | null;
+  dependsOn?: QuestionDependency | null;
+}
+
+function evaluateDependency(dep: QuestionDependency, answers: Record<string, string>): boolean {
+  const answer = answers[dep.questionId];
+  if (answer === undefined || answer === "") return false;
+
+  switch (dep.condition) {
+    case "equals":
+      return answer === String(dep.value);
+    case "not_equals":
+      return answer !== String(dep.value);
+    case "includes": {
+      try {
+        const selected: string[] = JSON.parse(answer);
+        return Array.isArray(dep.value)
+          ? (dep.value as string[]).some((v) => selected.includes(v))
+          : selected.includes(String(dep.value));
+      } catch {
+        return answer.includes(String(dep.value));
+      }
+    }
+    case "not_includes": {
+      try {
+        const selected: string[] = JSON.parse(answer);
+        return Array.isArray(dep.value)
+          ? !(dep.value as string[]).some((v) => selected.includes(v))
+          : !selected.includes(String(dep.value));
+      } catch {
+        return !answer.includes(String(dep.value));
+      }
+    }
+    case "gte":
+      return Number(answer) >= Number(dep.value);
+    case "lte":
+      return Number(answer) <= Number(dep.value);
+    case "between": {
+      const [min, max] = dep.value as [number, number];
+      const num = Number(answer);
+      return num >= min && num <= max;
+    }
+    default:
+      return true;
+  }
 }
 
 interface ValidityState {
@@ -25,7 +71,7 @@ export default function SurveyPage() {
   const searchParams = useSearchParams();
   const enrollmentId = searchParams.get("enrollmentId");
 
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questions, setQuestions] = useState<SurveyQuestion[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -41,9 +87,11 @@ export default function SurveyPage() {
         const res = await fetch(`/api/studies/${studyId}/public`);
         if (res.ok) {
           const data = await res.json();
-          const qs = (data.study.questions ?? []).map((q: Question) => ({
+          const qs = (data.study.questions ?? []).map((q: SurveyQuestion) => ({
             ...q,
-            options: typeof q.options === "string" ? JSON.parse(q.options) : q.options,
+            options: typeof q.options === "string" ? JSON.parse(q.options as unknown as string) : q.options,
+            config: typeof q.config === "string" ? JSON.parse(q.config as unknown as string) : q.config,
+            dependsOn: typeof q.dependsOn === "string" ? JSON.parse(q.dependsOn as unknown as string) : q.dependsOn,
           }));
           setQuestions(qs);
           if (qs.length > 0) {
@@ -57,9 +105,16 @@ export default function SurveyPage() {
     if (studyId) loadQuestions();
   }, [studyId]);
 
-  const question = questions[currentIndex];
-  const isLast = currentIndex === questions.length - 1;
-  const progress = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
+  const visibleQuestions = useMemo(() => {
+    return questions.filter((q) => {
+      if (!q.dependsOn) return true;
+      return evaluateDependency(q.dependsOn, answers);
+    });
+  }, [questions, answers]);
+
+  const question = visibleQuestions[currentIndex];
+  const isLast = currentIndex === visibleQuestions.length - 1;
+  const progress = visibleQuestions.length > 0 ? ((currentIndex + 1) / visibleQuestions.length) * 100 : 0;
   const currentValidity = question ? validity[question.id] : undefined;
 
   function setAnswer(value: string) {
@@ -78,7 +133,7 @@ export default function SurveyPage() {
     if (isLast) {
       submitResponses();
     } else {
-      const nextQ = questions[currentIndex + 1];
+      const nextQ = visibleQuestions[currentIndex + 1];
       setTimeStarted((prev) => ({ ...prev, [nextQ.id]: Date.now() }));
       setCurrentIndex((i) => i + 1);
     }
@@ -93,7 +148,7 @@ export default function SurveyPage() {
     setSubmitting(true);
     try {
       const now = Date.now();
-      const responsePayload = questions.map((q) => ({
+      const responsePayload = visibleQuestions.map((q) => ({
         questionId: q.id,
         value: answers[q.id] ?? "",
         timeSpentMs: now - (timeStarted[q.id] ?? now),
@@ -162,7 +217,7 @@ export default function SurveyPage() {
     } finally {
       setValidating(false);
     }
-  }, [answers, question, isLast, validity, questions, currentIndex, timeStarted, enrollmentId]);
+  }, [answers, question, isLast, validity, visibleQuestions, currentIndex, timeStarted, enrollmentId]);
 
   function dismissWarning() {
     if (!question) return;
@@ -213,7 +268,7 @@ export default function SurveyPage() {
       <div className="w-full max-w-lg space-y-4">
         <div className="space-y-1">
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Question {currentIndex + 1} of {questions.length}</span>
+            <span>Question {currentIndex + 1} of {visibleQuestions.length}</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -229,28 +284,52 @@ export default function SurveyPage() {
             <CardTitle className="text-lg">{question.prompt}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {question.type === "SCALE" && (
-              <div className="flex gap-2">
-                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setAnswer(String(n))}
-                    className={`h-10 w-10 rounded-lg border text-sm font-medium transition-colors ${
-                      answers[question.id] === String(n)
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-muted"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            )}
+            {question.type === "SCALE" && (() => {
+              const sc = question.config?.scale ?? { min: 1, max: 10 };
+              const step = sc.step ?? 1;
+              const values: number[] = [];
+              for (let n = sc.min; n <= sc.max; n += step) values.push(n);
+              return (
+                <div className="space-y-2">
+                  <div className="flex gap-2 flex-wrap">
+                    {values.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setAnswer(String(n))}
+                        className={`h-10 w-10 rounded-lg border text-sm font-medium transition-colors ${
+                          answers[question.id] === String(n)
+                            ? "bg-primary text-primary-foreground"
+                            : "hover:bg-muted"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  {(sc.minLabel || sc.maxLabel) && (
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{sc.minLabel ?? ""}</span>
+                      <span>{sc.maxLabel ?? ""}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
-            {(question.type === "LONG_TEXT" || question.type === "SHORT_TEXT") && (
+            {question.type === "LONG_TEXT" && (
               <textarea
                 className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                placeholder="Type your answer..."
+                value={answers[question.id] || ""}
+                onChange={(e) => setAnswer(e.target.value)}
+              />
+            )}
+
+            {question.type === "SHORT_TEXT" && (
+              <input
+                type="text"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 placeholder="Type your answer..."
                 value={answers[question.id] || ""}
                 onChange={(e) => setAnswer(e.target.value)}
@@ -275,6 +354,44 @@ export default function SurveyPage() {
                 ))}
               </div>
             )}
+
+            {question.type === "CHECKBOX" && question.options && (() => {
+              const selected: string[] = (() => {
+                try { return JSON.parse(answers[question.id] || "[]"); }
+                catch { return []; }
+              })();
+              return (
+                <div className="space-y-2">
+                  {question.options.map((option) => {
+                    const isChecked = selected.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => {
+                          const next = isChecked
+                            ? selected.filter((s) => s !== option)
+                            : [...selected, option];
+                          setAnswer(JSON.stringify(next));
+                        }}
+                        className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors flex items-center gap-3 ${
+                          isChecked
+                            ? "bg-primary text-primary-foreground"
+                            : "hover:bg-muted"
+                        }`}
+                      >
+                        <span className={`h-4 w-4 rounded border flex items-center justify-center text-xs ${
+                          isChecked ? "bg-primary-foreground text-primary" : "border-current"
+                        }`}>
+                          {isChecked ? "\u2713" : ""}
+                        </span>
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {currentValidity && !currentValidity.dismissed && (
               <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">

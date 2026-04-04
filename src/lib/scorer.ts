@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { pool, generateId } from "./db";
+import { analyzeStructuredQuality } from "./quality";
 import type { QuestionType } from "@/types";
 
 function getOpenAI() {
@@ -323,6 +324,18 @@ export async function triggerScoringPipeline(
       );
     }
 
+    // Run structured quality analysis (response time + reverse-score checks)
+    let structuredScore = 1.0;
+    let structuredFlagReasons: string[] = [];
+    try {
+      const structuredResult = await analyzeStructuredQuality(enrollmentId);
+      structuredScore = structuredResult.overallStructuredScore;
+      structuredFlagReasons = structuredResult.flagReasons;
+    } catch (err) {
+      console.error("Structured quality analysis failed (non-fatal):", err);
+    }
+
+    // Check average LLM score for text responses
     const scoresResult = await client.query(
       `SELECT qs."overallScore"
       FROM "QualityScore" qs
@@ -331,10 +344,17 @@ export async function triggerScoringPipeline(
       [enrollmentId]
     );
     const allScores = scoresResult.rows;
-    const avgScore =
-      allScores.reduce((sum, s) => sum + parseFloat(s.overallScore), 0) / allScores.length;
+    const avgLlmScore = allScores.length > 0
+      ? allScores.reduce((sum, s) => sum + parseFloat(s.overallScore), 0) / allScores.length
+      : 1.0;
 
-    if (avgScore < 0.5) {
+    // Combined score: LLM scoring for text + structured analysis for all types
+    const hasTextScores = allScores.length > 0;
+    const combinedScore = hasTextScores
+      ? avgLlmScore * 0.5 + structuredScore * 0.5
+      : structuredScore;
+
+    if (combinedScore < 0.5) {
       await client.query(
         'UPDATE "Enrollment" SET "status" = $1 WHERE "id" = $2',
         ["FLAGGED", enrollmentId]

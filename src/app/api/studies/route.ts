@@ -27,8 +27,18 @@ export async function POST(req: Request) {
     for (const q of body.questions) {
       const questionId = generateId();
       await client.query(
-        'INSERT INTO "Question" ("id", "studyId", "order", "type", "prompt", "options") VALUES ($1, $2, $3, $4, $5, $6)',
-        [questionId, studyId, q.order, q.type, q.prompt, q.options ? JSON.stringify(q.options) : null]
+        'INSERT INTO "Question" ("id", "studyId", "order", "type", "prompt", "options", "required", "config", "dependsOn") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        [
+          questionId,
+          studyId,
+          q.order,
+          q.type,
+          q.prompt,
+          q.options ? JSON.stringify(q.options) : null,
+          q.required !== false,
+          q.config ? JSON.stringify(q.config) : null,
+          q.dependsOn ? JSON.stringify(q.dependsOn) : null,
+        ]
       );
     }
 
