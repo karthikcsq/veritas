@@ -316,9 +316,8 @@ export default function NewStudyPage() {
         setAnalysisPhase("done");
 
         if (revData.recommendations?.length > 0) {
-          const maxOrder = questions.length;
-          const firstClampedOrder = Math.min(revData.recommendations[0].suggestedOrder, maxOrder);
-          const idx = questions.findIndex((q) => q.order === firstClampedOrder);
+          const firstOriginal = revData.recommendations[0].originalPrompt;
+          const idx = questions.findIndex((q) => q.prompt === firstOriginal);
           if (idx >= 0) {
             setTimeout(() => {
               document.getElementById(`rec-${idx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -478,12 +477,9 @@ export default function NewStudyPage() {
               {questions.map((q, i) => {
                 // Find recommendation that targets this question's order position
                 // Clamp suggestedOrder to valid range (AI sometimes suggests order > question count)
-                const maxOrder = questions.length;
+                // Match reverse recommendation to the original question it reverses
                 const rec = qualityResult?.recommendations.find(
-                  (r) => {
-                    const clampedOrder = Math.min(r.suggestedOrder, maxOrder);
-                    return clampedOrder === q.order && !acceptedRecs.has(r.originalPrompt);
-                  }
+                  (r) => r.originalPrompt === q.prompt && !acceptedRecs.has(r.originalPrompt)
                 );
                 const recPair = rec ? qualityResult?.reversePairs.find(
                   (p) => qualityResult?.recommendations.some(
@@ -774,7 +770,7 @@ export default function NewStudyPage() {
                           </p>
                         )}
                         <p className="text-xs text-violet-500 italic">
-                          This question checks consistency with Q{originalOrder} (&ldquo;{rec.originalPrompt}&rdquo;). It&apos;s placed here intentionally &mdash; reverse questions work best when separated from the original.
+                          If accepted, this will be inserted at position {rec.suggestedOrder} (away from Q{originalOrder}) &mdash; reverse questions work best when separated from the original.
                         </p>
                       </div>
                     </div>
@@ -790,7 +786,7 @@ export default function NewStudyPage() {
                             (r) => r.originalPrompt !== rec.originalPrompt && !acceptedRecs.has(r.originalPrompt)
                           );
                           if (nextRec) {
-                            const nextIdx = questions.findIndex((qq) => qq.order === nextRec.suggestedOrder);
+                            const nextIdx = questions.findIndex((qq) => qq.prompt === nextRec.originalPrompt);
                             if (nextIdx >= 0) {
                               setTimeout(() => {
                                 document.getElementById(`rec-${nextIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -813,7 +809,7 @@ export default function NewStudyPage() {
                             (r) => r.originalPrompt !== rec.originalPrompt && !acceptedRecs.has(r.originalPrompt)
                           );
                           if (nextRec) {
-                            const nextIdx = questions.findIndex((qq) => qq.order === nextRec.suggestedOrder);
+                            const nextIdx = questions.findIndex((qq) => qq.prompt === nextRec.originalPrompt);
                             if (nextIdx >= 0) {
                               setTimeout(() => {
                                 document.getElementById(`rec-${nextIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
