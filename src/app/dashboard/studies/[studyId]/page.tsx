@@ -24,7 +24,7 @@ import { LinguisticTab } from "@/components/analytics/linguistic-tab";
 import { GeographicTab } from "@/components/analytics/geographic-tab";
 import { BehaviorTab } from "@/components/analytics/behavior-tab";
 import { QuestionsTab } from "@/components/analytics/questions-tab";
-import type { StudyDetail } from "@/types";
+import type { StudyDetail, AnalyticsData } from "@/types";
 
 const TABS = [
   { value: "overview", label: "Overview" },
@@ -44,16 +44,23 @@ const statusColors: Record<string, { border: string; bg: string; text: string; d
 export default function StudyDetailPage() {
   const { studyId } = useParams<{ studyId: string }>();
   const [study, setStudy] = useState<StudyDetail | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/studies/${studyId}`);
-        if (res.ok) {
-          const data = await res.json();
+        const [studyRes, analyticsRes] = await Promise.all([
+          fetch(`/api/studies/${studyId}`),
+          fetch(`/api/studies/${studyId}/analytics`),
+        ]);
+        if (studyRes.ok) {
+          const data = await studyRes.json();
           setStudy(data.study);
+        }
+        if (analyticsRes.ok) {
+          setAnalytics(await analyticsRes.json());
         }
       } finally {
         setLoading(false);
@@ -111,7 +118,7 @@ export default function StudyDetailPage() {
     { label: "Enrolled", value: String(enrollmentCount), sub: `/ ${study.targetCount} target`, icon: Users, color: "text-sky-300", bg: "bg-sky-500/20" },
     { label: "Completed", value: String(completedCount), sub: enrollmentCount ? `${Math.round((completedCount / enrollmentCount) * 100)}%` : "0%", icon: CheckCircle, color: "text-emerald-300", bg: "bg-emerald-500/20" },
     { label: "Flagged", value: String(flaggedCount), sub: enrollmentCount ? `${Math.round((flaggedCount / enrollmentCount) * 100)}%` : "0%", icon: AlertTriangle, color: "text-rose-300", bg: "bg-rose-500/20" },
-    { label: "Avg Quality", value: avgQuality > 0 ? avgQuality.toFixed(2) : "—", sub: "score", icon: Star, color: "text-violet-300", bg: "bg-violet-500/20" },
+    { label: "Avg Quality", value: avgQuality > 0 ? `${Math.round(avgQuality * 100)}%` : "—", sub: "avg quality", icon: Star, color: "text-violet-300", bg: "bg-violet-500/20" },
   ];
 
   return (
@@ -199,12 +206,12 @@ export default function StudyDetailPage() {
         </div>
 
         <div className="mx-auto max-w-7xl px-6 py-10">
-          <TabsContent value="overview"><OverviewTab /></TabsContent>
-          <TabsContent value="integrity"><IntegrityTab /></TabsContent>
+          <TabsContent value="overview"><OverviewTab data={analytics} /></TabsContent>
+          <TabsContent value="integrity"><IntegrityTab data={analytics} /></TabsContent>
           <TabsContent value="linguistic"><LinguisticTab /></TabsContent>
           <TabsContent value="geographic"><GeographicTab /></TabsContent>
           <TabsContent value="behavior"><BehaviorTab /></TabsContent>
-          <TabsContent value="questions"><QuestionsTab /></TabsContent>
+          <TabsContent value="questions"><QuestionsTab data={analytics} /></TabsContent>
         </div>
       </Tabs>
     </div>

@@ -146,6 +146,62 @@ export interface CheckContradictionsResponse {
   summary: string;
 }
 
+// ---- Analytics ----
+export interface AnalyticsEnrollment {
+  id: string;
+  status: EnrollmentStatus;
+  enrolledAt: string;
+  completedAt: string | null;
+  avgOverall: number | null;
+  avgCoherence: number | null;
+  avgEffort: number | null;
+  avgConsistency: number | null;
+  hasFlaggedResponse: boolean;
+  flagReasons: string | null;
+}
+
+export interface AnalyticsQuestion {
+  id: string;
+  order: number;
+  type: QuestionType;
+  prompt: string;
+  options: string[] | null;
+  responseCount: number;
+  responseRate: number;
+  avgQuality: number | null;
+  stat: string;
+}
+
+export interface AnalyticsResponseDetail {
+  question: string;
+  answer: string;
+  score: number | null;
+  flagged: boolean;
+}
+
+export interface AnalyticsData {
+  enrollments: AnalyticsEnrollment[];
+  dimensions: {
+    coherence: number;
+    effort: number;
+    consistency: number;
+    overall: number;
+  };
+  qualityDistribution: {
+    high: number;
+    moderate: number;
+    flagged: number;
+  };
+  trend: Array<{
+    date: string;
+    enrolled: number;
+    completed: number;
+    flagged: number;
+  }>;
+  questions: AnalyticsQuestion[];
+  responsesByEnrollment: Record<string, AnalyticsResponseDetail[]>;
+}
+
 // ---- Dashboard ----
 export interface DashboardStats {
   totalEnrollments: number;
