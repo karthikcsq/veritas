@@ -33,8 +33,8 @@ export async function POST(
     for (const r of body.responses) {
       const id = generateId();
       await client.query(
-        'INSERT INTO "Response" ("id", "enrollmentId", "questionId", "value", "timeSpentMs", "submittedAt") VALUES ($1, $2, $3, $4, $5, NOW())',
-        [id, enrollmentId, r.questionId, r.value, r.timeSpentMs]
+        'INSERT INTO "Response" ("id", "enrollmentId", "questionId", "value", "timeSpentMs", "validityScore", "submittedAt") VALUES ($1, $2, $3, $4, $5, $6, NOW())',
+        [id, enrollmentId, r.questionId, r.value, r.timeSpentMs, r.validityScore ?? null]
       );
       responseIds.push(id);
     }
@@ -82,6 +82,7 @@ export async function GET(
       q."prompt" AS "questionPrompt",
       r."value",
       r."timeSpentMs",
+      r."validityScore",
       qs."overallScore",
       qs."coherenceScore",
       qs."effortScore",
@@ -102,6 +103,7 @@ export async function GET(
       questionPrompt: r.questionPrompt,
       value: r.value,
       timeSpentMs: r.timeSpentMs,
+      validityScore: r.validityScore != null ? parseInt(r.validityScore) : null,
       qualityScore: r.overallScore != null
         ? {
             overallScore: parseFloat(r.overallScore),

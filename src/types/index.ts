@@ -80,7 +80,40 @@ export interface SubmitResponsesRequest {
     questionId: string;
     value: string;
     timeSpentMs: number;
+    validityScore?: number;
   }>;
+}
+
+// ---- Validity ----
+export interface ValidateResponseRequest {
+  question: string;
+  answer: string;
+  questionType: QuestionType;
+}
+
+export interface ValidateResponseResponse {
+  score: number;
+  explanation: string;
+}
+
+// ---- Contradictions ----
+export interface CheckContradictionsRequest {
+  responses: Array<{
+    question: string;
+    answer: string;
+  }>;
+}
+
+export interface CheckContradictionsResponse {
+  score: number;
+  contradictions: Array<{
+    questionA: string;
+    answerA: string;
+    questionB: string;
+    answerB: string;
+    explanation: string;
+  }>;
+  summary: string;
 }
 
 // ---- Dashboard ----

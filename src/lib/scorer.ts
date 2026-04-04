@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { pool, generateId } from "./db";
+import type { QuestionType } from "@/types";
 
 function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -106,6 +107,181 @@ export async function scoreResponse(
     consistencyScore: scores.consistency,
     flagged,
     flagReason: flagged ? scores.flagReason : null,
+  };
+}
+
+// --- Real-time validity checking ---
+
+export interface ValidityResult {
+  score: number;
+  explanation: string;
+}
+
+function buildValidityPrompt(
+  question: string,
+  answer: string,
+  questionType: QuestionType
+): string {
+  const typeGuidance =
+    questionType === "SHORT_TEXT"
+      ? "This is a short-answer question. The answer should be a brief, on-topic response."
+      : "This is a long-form question. The answer should address the topic with some substance.";
+
+  return `You evaluate whether a survey answer actually responds to the question that was asked.
+
+${typeGuidance}
+
+QUESTION:
+${question}
+
+ANSWER:
+${answer}
+
+Score the answer's VALIDITY from 0 to 100:
+- 0–20: Completely irrelevant. The answer has nothing to do with the question (e.g. random words, copy-paste from elsewhere, answering a totally different question).
+- 21–40: Marginally related. Mentions a related topic but does not answer what was asked.
+- 41–60: Partially valid. Addresses part of the question but misses key aspects or is vague.
+- 61–80: Mostly valid. Clearly responds to the question with minor gaps.
+- 81–100: Fully valid. Directly and clearly addresses what the question asked.
+
+Focus ONLY on whether the answer is a genuine attempt to respond to this specific question. Do NOT judge grammar, spelling, depth, or effort — only topical relevance and semantic connection to the question.
+
+Respond ONLY with valid JSON:
+{
+  "score": 0,
+  "explanation": "Brief one-sentence reason for the score"
+}`;
+}
+
+export async function checkResponseValidity(
+  question: string,
+  answer: string,
+  questionType: QuestionType
+): Promise<ValidityResult> {
+  if (questionType === "SCALE" || questionType === "MULTIPLE_CHOICE") {
+    return { score: 100, explanation: "Structured response — inherently valid." };
+  }
+
+  const trimmed = answer.trim();
+  if (trimmed.length === 0) {
+    return { score: 0, explanation: "Empty response." };
+  }
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "user",
+        content: buildValidityPrompt(question, trimmed, questionType),
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.1,
+    max_tokens: 150,
+  });
+
+  const result = JSON.parse(completion.choices[0].message.content!);
+  const score = Math.max(0, Math.min(100, Math.round(result.score)));
+
+  return {
+    score,
+    explanation: result.explanation ?? "No explanation provided.",
+  };
+}
+
+// --- Contradiction detection across all responses ---
+
+export interface ContradictionResult {
+  score: number;
+  contradictions: Array<{
+    questionA: string;
+    answerA: string;
+    questionB: string;
+    answerB: string;
+    explanation: string;
+  }>;
+  summary: string;
+}
+
+function buildContradictionPrompt(
+  responses: Array<{ question: string; answer: string }>
+): string {
+  const formatted = responses
+    .map((r, i) => `[${i + 1}] Q: ${r.question}\n    A: ${r.answer}`)
+    .join("\n\n");
+
+  return `You are a clinical research data quality assessor. Analyze the following set of survey responses from a single participant and identify any logical contradictions between answers.
+
+PARTICIPANT'S RESPONSES:
+${formatted}
+
+Score the overall CONTRADICTION level from 0 to 100:
+- 0–10: No contradictions. All answers are consistent with each other.
+- 11–30: Minor inconsistencies. Small discrepancies that could be explained by imprecise wording.
+- 31–60: Moderate contradictions. Some answers conflict in ways that raise questions about accuracy.
+- 61–80: Significant contradictions. Multiple answers directly conflict with each other.
+- 81–100: Extreme contradictions. Answers are fundamentally incompatible, suggesting careless or fabricated responses.
+
+Look for:
+- Factual contradictions (e.g. "I've never taken medication" vs "I take ibuprofen daily")
+- Logical impossibilities (e.g. rating pain 1/10 but describing it as "unbearable" in text)
+- Inconsistent timelines or frequencies
+- Scale ratings that contradict free-text descriptions
+
+Do NOT flag:
+- Nuanced or complex answers that appear contradictory at first glance but are actually reasonable
+- Differences in detail level between answers
+- Opinions that evolved across questions
+
+Respond ONLY with valid JSON:
+{
+  "score": 0,
+  "contradictions": [
+    {
+      "questionA": "the first question",
+      "answerA": "the first answer",
+      "questionB": "the conflicting question",
+      "answerB": "the conflicting answer",
+      "explanation": "Brief explanation of the contradiction"
+    }
+  ],
+  "summary": "One-sentence overall assessment"
+}
+
+If there are no contradictions, return an empty array for "contradictions".`;
+}
+
+export async function checkContradictions(
+  responses: Array<{ question: string; answer: string }>
+): Promise<ContradictionResult> {
+  if (responses.length < 2) {
+    return {
+      score: 0,
+      contradictions: [],
+      summary: "Not enough responses to check for contradictions.",
+    };
+  }
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "user",
+        content: buildContradictionPrompt(responses),
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.1,
+    max_tokens: 800,
+  });
+
+  const result = JSON.parse(completion.choices[0].message.content!);
+  const score = Math.max(0, Math.min(100, Math.round(result.score)));
+
+  return {
+    score,
+    contradictions: result.contradictions ?? [],
+    summary: result.summary ?? "No summary provided.",
   };
 }
 
