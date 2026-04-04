@@ -116,6 +116,7 @@ export async function scoreResponse(
 export interface ValidityResult {
   score: number;
   explanation: string;
+  missedParts: string[];
 }
 
 function buildValidityPrompt(
@@ -147,10 +148,13 @@ Score the answer's VALIDITY from 0 to 100:
 
 Be lenient with casual, short, or informal answers — as long as the person is genuinely trying to respond to the question, score generously. Do NOT judge grammar, spelling, depth, or effort — only whether the answer is on-topic.
 
+If the question asks about multiple things and the answer misses some of them, list the EXACT substrings from the question text that were not addressed in "missedParts". Each entry must be a verbatim substring of the QUESTION text above. If nothing was missed, return an empty array.
+
 Respond ONLY with valid JSON:
 {
   "score": 0,
-  "explanation": "Brief friendly one-sentence reason"
+  "explanation": "Brief friendly one-sentence reason",
+  "missedParts": ["exact substring from question"]
 }`;
 }
 
@@ -160,12 +164,12 @@ export async function checkResponseValidity(
   questionType: QuestionType
 ): Promise<ValidityResult> {
   if (questionType === "SCALE" || questionType === "MULTIPLE_CHOICE") {
-    return { score: 100, explanation: "Structured response — inherently valid." };
+    return { score: 100, explanation: "Structured response — inherently valid.", missedParts: [] };
   }
 
   const trimmed = answer.trim();
   if (trimmed.length === 0) {
-    return { score: 0, explanation: "Empty response." };
+    return { score: 0, explanation: "Empty response.", missedParts: [] };
   }
 
   const completion = await getOpenAI().chat.completions.create({
@@ -184,9 +188,14 @@ export async function checkResponseValidity(
   const result = JSON.parse(completion.choices[0].message.content!);
   const score = Math.max(0, Math.min(100, Math.round(result.score)));
 
+  const missedParts: string[] = Array.isArray(result.missedParts)
+    ? result.missedParts.filter((p: unknown) => typeof p === "string" && question.includes(p as string))
+    : [];
+
   return {
     score,
     explanation: result.explanation ?? "No explanation provided.",
+    missedParts,
   };
 }
 

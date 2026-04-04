@@ -123,6 +123,7 @@ export interface ValidateResponseRequest {
 export interface ValidateResponseResponse {
   score: number;
   explanation: string;
+  missedParts: string[];
 }
 
 // ---- Contradictions ----

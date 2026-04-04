@@ -63,7 +63,45 @@ function evaluateDependency(dep: QuestionDependency, answers: Record<string, str
 interface ValidityState {
   score: number;
   explanation: string;
+  missedParts: string[];
   dismissed: boolean;
+}
+
+function highlightMissedParts(prompt: string, missedParts: string[]): React.ReactNode {
+  if (missedParts.length === 0) return prompt;
+
+  const sortedParts = [...missedParts].sort((a, b) => {
+    const idxA = prompt.toLowerCase().indexOf(a.toLowerCase());
+    const idxB = prompt.toLowerCase().indexOf(b.toLowerCase());
+    return idxA - idxB;
+  });
+
+  const segments: React.ReactNode[] = [];
+  let cursor = 0;
+
+  for (const part of sortedParts) {
+    const idx = prompt.toLowerCase().indexOf(part.toLowerCase(), cursor);
+    if (idx === -1) continue;
+
+    if (idx > cursor) {
+      segments.push(prompt.slice(cursor, idx));
+    }
+    segments.push(
+      <mark
+        key={idx}
+        className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5 underline decoration-yellow-500 decoration-2 underline-offset-2"
+      >
+        {prompt.slice(idx, idx + part.length)}
+      </mark>
+    );
+    cursor = idx + part.length;
+  }
+
+  if (cursor < prompt.length) {
+    segments.push(prompt.slice(cursor));
+  }
+
+  return <>{segments}</>;
 }
 
 export default function SurveyPage() {
@@ -206,6 +244,7 @@ export default function SurveyPage() {
           [question.id]: {
             score: data.score,
             explanation: data.explanation,
+            missedParts: data.missedParts ?? [],
             dismissed: false,
           },
         }));
@@ -281,7 +320,11 @@ export default function SurveyPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">{question.prompt}</CardTitle>
+            <CardTitle className="text-lg">
+              {currentValidity && !currentValidity.dismissed && currentValidity.missedParts.length > 0
+                ? highlightMissedParts(question.prompt, currentValidity.missedParts)
+                : question.prompt}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {question.type === "SCALE" && (() => {
