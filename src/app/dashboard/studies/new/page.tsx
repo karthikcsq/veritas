@@ -26,6 +26,7 @@ export default function NewStudyPage() {
   const [description, setDescription] = useState("");
   const [targetCount, setTargetCount] = useState("");
   const [compensation, setCompensation] = useState("");
+  const [pageState, setPageState] = useState<"edit" | "review">("edit");
   const [submitting, setSubmitting] = useState(false);
   const [analysisPhase, setAnalysisPhase] = useState<"idle" | "creating" | "specificity" | "reverse" | "done">("idle");
   const [analysisProgress, setAnalysisProgress] = useState(0);
@@ -272,14 +273,14 @@ export default function NewStudyPage() {
             setSpecificityResult(specData);
             clearInterval(specInterval);
             setAnalysisProgress(100);
-            // Scroll to first specificity suggestion
+            setPageState("review");
             const firstIdx = specData.suggestions[0].questionIndex;
             setTimeout(() => {
               document.getElementById(`spec-${firstIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
             }, 200);
             setAnalysisPhase("done");
             setSubmitting(false);
-            return; // Stop here — reverse runs after specificity is resolved
+            return;
           }
         }
       } catch (err) {
@@ -314,6 +315,7 @@ export default function NewStudyPage() {
         const revData = await revRes.json();
         setQualityResult(revData);
         setAnalysisPhase("done");
+        setPageState("review");
 
         if (revData.recommendations?.length > 0) {
           const firstOriginal = revData.recommendations[0].originalPrompt;
@@ -397,12 +399,37 @@ export default function NewStudyPage() {
   return (
     <div className="px-6 py-8">
       <div className="flex items-center gap-4 mb-6">
-        <Link href="/dashboard">
-          <Button variant="ghost" size="sm">
-            &larr; Back
+        {pageState === "review" ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // Delete the draft study so they can re-create
+              if (createdStudyId) {
+                fetch(`/api/studies/${createdStudyId}`, { method: "DELETE" }).catch(() => {});
+              }
+              setPageState("edit");
+              setCreatedStudyId(null);
+              setAnalysisPhase("idle");
+              setSpecificityResult(null);
+              setQualityResult(null);
+              setAcceptedSpecificity(new Set());
+              setAcceptedRecs(new Set());
+              window.scrollTo(0, 0);
+            }}
+          >
+            &larr; Back to Edit
           </Button>
-        </Link>
-        <h1 className="font-semibold text-lg">Create New Study</h1>
+        ) : (
+          <Link href="/dashboard">
+            <Button variant="ghost" size="sm">
+              &larr; Back
+            </Button>
+          </Link>
+        )}
+        <h1 className="font-semibold text-lg">
+          {pageState === "review" ? "Review Suggestions" : "Create New Study"}
+        </h1>
       </div>
 
       <div className="max-w-2xl mx-auto">
@@ -424,6 +451,7 @@ export default function NewStudyPage() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   required
+                  disabled={pageState === "review"}
                 />
               </div>
               <div className="space-y-2">

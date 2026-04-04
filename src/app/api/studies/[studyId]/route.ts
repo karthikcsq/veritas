@@ -67,3 +67,41 @@ export async function GET(
     },
   });
 }
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ studyId: string }> }
+) {
+  const { studyId } = await params;
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const researcherId = (session.user as { id: string }).id;
+
+  // Only allow deleting DRAFT studies owned by this researcher
+  const studyResult = await pool.query(
+    'SELECT "id" FROM "Study" WHERE "id" = $1 AND "researcherId" = $2 AND "status" = $3',
+    [studyId, researcherId, "DRAFT"]
+  );
+  if (studyResult.rows.length === 0) {
+    return NextResponse.json({ error: "Study not found or not deletable" }, { status: 404 });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query('DELETE FROM "ReversePair" WHERE "studyId" = $1', [studyId]);
+    await client.query('DELETE FROM "Question" WHERE "studyId" = $1', [studyId]);
+    await client.query('DELETE FROM "Study" WHERE "id" = $1', [studyId]);
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+
+  return NextResponse.json({ deleted: true });
+}
