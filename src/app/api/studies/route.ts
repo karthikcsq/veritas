@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { pool, generateId } from "@/lib/db";
+import { detectAndStoreReversePairs, recommendReverseQuestions } from "@/lib/quality";
 import type { CreateStudyRequest } from "@/types";
 
 export async function POST(req: Request) {
@@ -44,6 +45,40 @@ export async function POST(req: Request) {
 
     await client.query("COMMIT");
 
+    // After study is created, detect reverse pairs and recommend if needed
+    let qualityAnalysis = null;
+    try {
+      const storedPairs = await detectAndStoreReversePairs(studyId);
+      let recommendations: Awaited<ReturnType<typeof recommendReverseQuestions>>["recommendations"] = [];
+      if (storedPairs.length < 2 && body.questions.length >= 5) {
+        const result = await recommendReverseQuestions(
+          body.questions.map((q) => ({
+            prompt: q.prompt,
+            type: q.type,
+            options: q.options ?? null,
+            config: q.config ?? null,
+          }))
+        );
+        recommendations = result.recommendations;
+      }
+      qualityAnalysis = {
+        reversePairsDetected: storedPairs.length,
+        reversePairs: storedPairs.map((p) => ({
+          construct: p.construct,
+          relationship: p.relationship,
+        })),
+        recommendations,
+        message:
+          storedPairs.length >= 2
+            ? `${storedPairs.length} reverse-scored pairs detected — quality checks are active.`
+            : recommendations.length > 0
+              ? `Only ${storedPairs.length} natural reverse pair(s) found. Consider adding ${recommendations.length} suggested question(s) for better quality detection.`
+              : `${storedPairs.length} reverse pair(s) detected.`,
+      };
+    } catch (err) {
+      console.error("Quality analysis on create failed (non-fatal):", err);
+    }
+
     return NextResponse.json(
       {
         study: {
@@ -52,6 +87,7 @@ export async function POST(req: Request) {
           status: study.status,
           worldIdAction: `study_enrollment_${study.id}`,
         },
+        qualityAnalysis,
       },
       { status: 201 }
     );

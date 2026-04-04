@@ -204,7 +204,7 @@ export default function StudyDetailPage() {
           <TabsContent value="linguistic"><LinguisticTab /></TabsContent>
           <TabsContent value="geographic"><GeographicTab /></TabsContent>
           <TabsContent value="behavior"><BehaviorTab /></TabsContent>
-          <TabsContent value="questions"><QuestionsTab /></TabsContent>
+          <TabsContent value="questions"><QuestionsTab questions={study.questions as Array<{ id: string; order: number; type: string; prompt: string; options?: string[] | null }>} /></TabsContent>
         </div>
       </Tabs>
     </div>

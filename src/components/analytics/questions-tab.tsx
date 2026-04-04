@@ -3,57 +3,37 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-const QUESTIONS = [
-  {
-    order: 1,
-    type: "SCALE",
-    prompt: "On a scale of 1-10, how would you rate your average daily pain level?",
-    stat: "Avg response: 6.8 / 10",
-    responseRate: 100,
-  },
-  {
-    order: 2,
-    type: "LONG_TEXT",
-    prompt: "Describe how your pain affects your daily activities.",
-    stat: "Avg length: 87 words",
-    responseRate: 100,
-  },
-  {
-    order: 3,
-    type: "MULTIPLE_CHOICE",
-    prompt: "Which pain management methods have you tried?",
-    options: ["Physical therapy", "Medication", "Acupuncture", "Exercise", "None"],
-    stat: "Top choice: Physical therapy (74%)",
-    responseRate: 100,
-  },
-  {
-    order: 4,
-    type: "LONG_TEXT",
-    prompt: "Describe your experience with prescription pain medication.",
-    stat: "Avg length: 124 words",
-    responseRate: 91,
-  },
-  {
-    order: 5,
-    type: "SHORT_TEXT",
-    prompt: "What is your single biggest challenge in managing pain day-to-day?",
-    stat: "Avg length: 34 words",
-    responseRate: 95,
-  },
-];
+interface Question {
+  id: string;
+  order: number;
+  type: string;
+  prompt: string;
+  options?: string[] | null;
+}
 
 const TYPE_STYLE: Record<string, string> = {
   SCALE: "bg-blue-100 text-blue-700 border-blue-200",
   LONG_TEXT: "bg-violet-100 text-violet-700 border-violet-200",
   SHORT_TEXT: "bg-emerald-100 text-emerald-700 border-emerald-200",
   MULTIPLE_CHOICE: "bg-amber-100 text-amber-700 border-amber-200",
+  CHECKBOX: "bg-orange-100 text-orange-700 border-orange-200",
 };
 
-export function QuestionsTab() {
+export function QuestionsTab({ questions }: { questions?: Question[] }) {
+  if (!questions || questions.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center text-muted-foreground">
+          No questions added to this study yet.
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {QUESTIONS.map((q) => (
-        <Card key={q.order} className="transition-shadow hover:shadow-sm">
+      {questions.map((q) => (
+        <Card key={q.id} className="transition-shadow hover:shadow-sm">
           <CardContent className="pb-5 pt-5">
             <div className="flex items-start gap-4">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-sm font-bold text-white">
@@ -61,21 +41,12 @@ export function QuestionsTab() {
               </div>
               <div className="flex-1">
                 <div className="mb-1.5 flex items-center gap-2">
-                  <Badge className={`text-[10px] ${TYPE_STYLE[q.type]}`}>
-                    {q.type.replace("_", " ")}
+                  <Badge className={`text-[10px] ${TYPE_STYLE[q.type] ?? "bg-gray-100 text-gray-700"}`}>
+                    {q.type.replace(/_/g, " ")}
                   </Badge>
-                  <span
-                    className={`text-xs ${
-                      q.responseRate < 95
-                        ? "text-amber-600"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {q.responseRate}% response rate
-                  </span>
                 </div>
                 <p className="font-medium">{q.prompt}</p>
-                {q.options && (
+                {q.options && Array.isArray(q.options) && q.options.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {q.options.map((o) => (
                       <span
@@ -87,9 +58,6 @@ export function QuestionsTab() {
                     ))}
                   </div>
                 )}
-                <div className="mt-2 text-sm text-muted-foreground">
-                  {q.stat}
-                </div>
               </div>
             </div>
           </CardContent>
