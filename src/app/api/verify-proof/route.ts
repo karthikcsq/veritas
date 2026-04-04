@@ -73,6 +73,13 @@ export async function POST(req: NextRequest) {
   } catch (e: unknown) {
     // 23505 = unique constraint violation (already verified)
     if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "23505") {
+      // For login (verify-account), duplicates are expected — same user logging in again
+      if (action === "verify-account") {
+        return NextResponse.json({
+          success: true,
+          nullifier: nullifier.toLowerCase(),
+        });
+      }
       return NextResponse.json(
         { error: "This identity has already been verified for this action" },
         { status: 409 },

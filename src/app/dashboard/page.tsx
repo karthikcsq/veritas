@@ -1,10 +1,11 @@
-"use client";
-
 import Link from "next/link";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { SignOutButton } from "@/components/sign-out-button";
 
 // Mock data — replace with API calls
 const mockStudies = [
@@ -34,7 +35,9 @@ const statusColor = {
   CLOSED: "outline",
 } as const;
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const session = await getServerSession(authOptions);
+
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Top bar */}
@@ -47,11 +50,9 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">
-            Dr. Jane Smith
+            {session?.user?.name ?? "Researcher"}
           </span>
-          <Button variant="ghost" size="sm">
-            Sign out
-          </Button>
+          <SignOutButton />
         </div>
       </header>
 
