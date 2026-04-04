@@ -35,21 +35,8 @@ export default function BrowseStudiesPage() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <nav className="border-b px-6 py-4 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">V</span>
-          </div>
-          <span className="font-semibold text-lg">Veritas</span>
-        </Link>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>Participant Portal</span>
-        </div>
-      </nav>
-
-      <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-10">
+    <div className="flex-1">
+      <main className="max-w-4xl mx-auto w-full px-6 py-10">
         {/* Welcome */}
         <div className="mb-8 space-y-2">
           <h1 className="text-3xl font-bold">Available Studies</h1>
