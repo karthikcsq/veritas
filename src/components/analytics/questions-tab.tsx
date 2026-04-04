@@ -49,7 +49,11 @@ const TYPE_STYLE: Record<string, string> = {
   MULTIPLE_CHOICE: "bg-amber-100 text-amber-700 border-amber-200",
 };
 
-export function QuestionsTab() {
+interface QuestionsTabProps {
+  questionStats: any[];
+}
+
+export function QuestionsTab({ questionStats }: QuestionsTabProps) {
   return (
     <div className="space-y-4">
       {QUESTIONS.map((q) => (

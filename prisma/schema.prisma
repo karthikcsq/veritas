@@ -120,8 +120,10 @@ model QualityScore {
   coherenceScore   Float
   effortScore      Float
   consistencyScore Float
+  similarityScore  Float?   // RAG k-NN similarity vs. prior responses for the same question
   flagged          Boolean  @default(false)
   flagReason       String?
+  similarityReason String?  // GPT explanation when similarity score is low
   scoredAt         DateTime @default(now())
 
   response Response @relation(fields: [responseId], references: [id])

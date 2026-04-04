@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   AlertTriangle,
-  Bot,
   CheckCircle,
   Info,
   Shield,
@@ -19,235 +18,55 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-type Enrollment = {
+type EnrollmentRow = {
   id: string;
   status: string;
-  country: string;
-  aiScore: number | null;
-  botScore: number | null;
+  overallScore: number | null;
+  coherenceScore: number | null;
+  effortScore: number | null;
   consistencyScore: number | null;
-  quality: number | null;
+  similarityScore: number | null;
+  flagged: boolean;
   flagReason: string | null;
-  answers: { question: string; answer: string; ideal: string }[];
+  similarityReason: string | null;
+  responses: {
+    questionId: string;
+    questionPrompt: string;
+    questionType: string;
+    value: string;
+    timeSpentMs: number | null;
+    wordCount: number;
+  }[];
 };
 
-const ENROLLMENTS: Enrollment[] = [
-  {
-    id: "e-4f2a",
-    status: "COMPLETED",
-    country: "🇺🇸 US",
-    aiScore: 0.12,
-    botScore: 0.08,
-    consistencyScore: 0.94,
-    quality: 0.91,
-    flagReason: null,
-    answers: [
-      {
-        question: "Daily pain rating (1–10)",
-        answer: "7",
-        ideal: "6.8 (avg across valid responses)",
-      },
-      {
-        question: "How pain affects your daily activities",
-        answer:
-          "I wake up most mornings with significant stiffness in my lower back. By midday, standing for more than 20 minutes becomes painful, so I have to sit or lean against something. Grocery shopping now takes twice as long.",
-        ideal:
-          "Chronic pain significantly limits routine tasks like walking, sleeping, and concentrating at work. Most participants report needing to modify activities and take rest breaks throughout the day.",
-      },
-      {
-        question: "Pain management methods tried",
-        answer: "Physical therapy, Medication",
-        ideal: "Physical therapy (74%), Medication (68%), Exercise (52%)",
-      },
-    ],
-  },
-  {
-    id: "e-7b1c",
-    status: "COMPLETED",
-    country: "🇬🇧 UK",
-    aiScore: 0.18,
-    botScore: 0.11,
-    consistencyScore: 0.87,
-    quality: 0.84,
-    flagReason: null,
-    answers: [
-      {
-        question: "Daily pain rating (1–10)",
-        answer: "5",
-        ideal: "6.8 (avg across valid responses)",
-      },
-      {
-        question: "How pain affects your daily activities",
-        answer:
-          "The pain mainly affects me when climbing stairs or bending down. I've had to give up gardening, which I used to love, because I can't kneel for more than a minute without sharp pain shooting up my knee.",
-        ideal:
-          "Chronic pain significantly limits routine tasks like walking, sleeping, and concentrating at work. Most participants report needing to modify activities and take rest breaks throughout the day.",
-      },
-      {
-        question: "Pain management methods tried",
-        answer: "Acupuncture, Exercise",
-        ideal: "Physical therapy (74%), Medication (68%), Exercise (52%)",
-      },
-    ],
-  },
-  {
-    id: "e-2d9e",
-    status: "FLAGGED",
-    country: "🇮🇳 IN",
-    aiScore: 0.89,
-    botScore: 0.76,
-    consistencyScore: 0.31,
-    quality: 0.32,
-    flagReason:
-      "Response time 340% faster than average; high AI authorship likelihood (89%); generic phrasing inconsistent with lived experience",
-    answers: [
-      {
-        question: "Daily pain rating (1–10)",
-        answer: "3",
-        ideal: "6.8 (avg across valid responses)",
-      },
-      {
-        question: "How pain affects your daily activities",
-        answer:
-          "Pain management is a complex medical topic that affects millions of adults globally. Various therapeutic interventions have demonstrated efficacy in clinical settings for managing chronic conditions.",
-        ideal:
-          "Chronic pain significantly limits routine tasks like walking, sleeping, and concentrating at work. Most participants report needing to modify activities and take rest breaks throughout the day.",
-      },
-      {
-        question: "Pain management methods tried",
-        answer: "Medication",
-        ideal: "Physical therapy (74%), Medication (68%), Exercise (52%)",
-      },
-    ],
-  },
-  {
-    id: "e-8c3f",
-    status: "COMPLETED",
-    country: "🇩🇪 DE",
-    aiScore: 0.09,
-    botScore: 0.05,
-    consistencyScore: 0.92,
-    quality: 0.88,
-    flagReason: null,
-    answers: [],
-  },
-  {
-    id: "e-1a5b",
-    status: "FLAGGED",
-    country: "🇺🇸 US",
-    aiScore: 0.94,
-    botScore: 0.82,
-    consistencyScore: 0.28,
-    quality: 0.28,
-    flagReason:
-      "Answer to Q4 contradicts Q2; survey completed in 12s (study avg: 312s); identical phrasing detected across 2 other flagged submissions",
-    answers: [],
-  },
-  {
-    id: "e-6e7d",
-    status: "COMPLETED",
-    country: "🇯🇵 JP",
-    aiScore: 0.15,
-    botScore: 0.09,
-    consistencyScore: 0.96,
-    quality: 0.93,
-    flagReason: null,
-    answers: [],
-  },
-  {
-    id: "e-3f8a",
-    status: "COMPLETED",
-    country: "🇨🇦 CA",
-    aiScore: 0.31,
-    botScore: 0.19,
-    consistencyScore: 0.78,
-    quality: 0.72,
-    flagReason: null,
-    answers: [],
-  },
-  {
-    id: "e-9g2h",
-    status: "FLAGGED",
-    country: "🇺🇸 US",
-    aiScore: 0.78,
-    botScore: 0.65,
-    consistencyScore: 0.44,
-    quality: 0.41,
-    flagReason:
-      "Mouse movement entropy score 0.11 (threshold: 0.40); automated browser fingerprint detected; response timing variance near zero",
-    answers: [],
-  },
-  {
-    id: "e-5h4i",
-    status: "COMPLETED",
-    country: "🇮🇳 IN",
-    aiScore: 0.11,
-    botScore: 0.07,
-    consistencyScore: 0.89,
-    quality: 0.86,
-    flagReason: null,
-    answers: [],
-  },
-  {
-    id: "e-0i6j",
-    status: "COMPLETED",
-    country: "🇦🇺 AU",
-    aiScore: 0.19,
-    botScore: 0.13,
-    consistencyScore: 0.83,
-    quality: 0.79,
-    flagReason: null,
-    answers: [],
-  },
-  {
-    id: "e-7j8k",
-    status: "IN_PROGRESS",
-    country: "🇫🇷 FR",
-    aiScore: null,
-    botScore: null,
-    consistencyScore: null,
-    quality: null,
-    flagReason: null,
-    answers: [],
-  },
-  {
-    id: "e-2k0l",
-    status: "COMPLETED",
-    country: "🇧🇷 BR",
-    aiScore: 0.22,
-    botScore: 0.14,
-    consistencyScore: 0.76,
-    quality: 0.77,
-    flagReason: null,
-    answers: [],
-  },
-];
+interface IntegrityTabProps {
+  enrollments: EnrollmentRow[];
+}
 
 function ScoreBar({
   value,
-  thresholdHigh = 0.6,
-  thresholdMid = 0.3,
+  invert = false,
 }: {
   value: number;
-  thresholdHigh?: number;
-  thresholdMid?: number;
+  invert?: boolean;
 }) {
-  const color =
-    value > thresholdHigh
-      ? "bg-rose-500"
-      : value > thresholdMid
-      ? "bg-amber-400"
-      : "bg-emerald-400";
+  // invert=false: high = green (quality, consistency)
+  // invert=true:  high = red (not currently used but kept for flexibility)
+  const pct = value * 100;
+  const color = invert
+    ? value > 0.6 ? "bg-rose-500" : value > 0.3 ? "bg-amber-400" : "bg-emerald-400"
+    : value >= 0.7 ? "bg-emerald-500" : value >= 0.45 ? "bg-amber-400" : "bg-rose-500";
+
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
         <div
           className={`h-full rounded-full transition-all ${color}`}
-          style={{ width: `${value * 100}%` }}
+          style={{ width: `${pct}%` }}
         />
       </div>
       <span className="w-8 text-right text-xs tabular-nums">
-        {(value * 100).toFixed(0)}%
+        {pct.toFixed(0)}%
       </span>
     </div>
   );
@@ -266,9 +85,7 @@ function WhyTooltip({ reason }: { reason: string }) {
       </button>
       {open && (
         <span className="absolute left-5 top-0 z-50 w-72 rounded-lg border bg-popover p-3 text-xs shadow-xl">
-          <span className="mb-1 block font-semibold text-rose-600">
-            Flag Reason
-          </span>
+          <span className="mb-1 block font-semibold text-rose-600">Flag Reason</span>
           {reason}
         </span>
       )}
@@ -276,26 +93,21 @@ function WhyTooltip({ reason }: { reason: string }) {
   );
 }
 
-export function IntegrityTab() {
+export function IntegrityTab({ enrollments }: IntegrityTabProps) {
   const [showOnlyClean, setShowOnlyClean] = useState(false);
-  const [selected, setSelected] = useState<Enrollment | null>(null);
+  const [selected, setSelected] = useState<EnrollmentRow | null>(null);
 
-  const flagged = ENROLLMENTS.filter((e) => e.status === "FLAGGED");
-  const aiDetected = ENROLLMENTS.filter(
-    (e) => e.aiScore !== null && e.aiScore > 0.6
+  const flaggedList = enrollments.filter((e) => e.flagged || e.status === "FLAGGED");
+  const lowSimilarity = enrollments.filter(
+    (e) => e.similarityScore !== null && e.similarityScore < 0.5
   );
-  const botDetected = ENROLLMENTS.filter(
-    (e) => e.botScore !== null && e.botScore > 0.5
-  );
-  const valid = ENROLLMENTS.filter(
-    (e) => e.status === "COMPLETED" && !e.flagReason
+  const valid = enrollments.filter(
+    (e) => e.status === "COMPLETED" && !e.flagged
   );
 
   const rows = showOnlyClean
-    ? ENROLLMENTS.filter(
-        (e) => e.status === "COMPLETED" && !e.flagReason
-      )
-    : ENROLLMENTS;
+    ? enrollments.filter((e) => e.status === "COMPLETED" && !e.flagged)
+    : enrollments;
 
   return (
     <div className="space-y-8">
@@ -305,13 +117,15 @@ export function IntegrityTab() {
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
               <div className="text-4xl font-bold text-rose-600 tabular-nums">
-                {flagged.length}
+                {flaggedList.length}
               </div>
               <div className="mt-1 text-sm font-semibold text-rose-700/80">
                 Flagged Responses
               </div>
               <div className="mt-1 text-xs text-rose-600/60">
-                {((flagged.length / ENROLLMENTS.length) * 100).toFixed(1)}% of total
+                {enrollments.length > 0
+                  ? `${((flaggedList.length / enrollments.length) * 100).toFixed(1)}% of total`
+                  : "no data"}
               </div>
             </div>
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/15">
@@ -319,17 +133,18 @@ export function IntegrityTab() {
             </div>
           </CardContent>
         </Card>
+
         <Card className="border-0 shadow-sm ring-2 ring-orange-200 bg-gradient-to-br from-orange-50 to-amber-50">
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
               <div className="text-4xl font-bold text-orange-600 tabular-nums">
-                {aiDetected.length}
+                {lowSimilarity.length}
               </div>
               <div className="mt-1 text-sm font-semibold text-orange-700/80">
-                AI-Generated
+                Low Similarity
               </div>
               <div className="mt-1 text-xs text-orange-600/60">
-                {((aiDetected.length / ENROLLMENTS.length) * 100).toFixed(1)}% detection rate
+                Atypical vs. peers
               </div>
             </div>
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/15">
@@ -337,24 +152,26 @@ export function IntegrityTab() {
             </div>
           </CardContent>
         </Card>
+
         <Card className="border-0 shadow-sm ring-2 ring-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50">
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
               <div className="text-4xl font-bold text-amber-600 tabular-nums">
-                {botDetected.length}
+                {enrollments.filter((e) => e.status === "IN_PROGRESS").length}
               </div>
               <div className="mt-1 text-sm font-semibold text-amber-700/80">
-                Bot-Like Behavior
+                In Progress
               </div>
               <div className="mt-1 text-xs text-amber-600/60">
-                Low entropy patterns
+                Not yet scored
               </div>
             </div>
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15">
-              <Bot className="h-7 w-7 text-amber-500" />
+              <Info className="h-7 w-7 text-amber-500" />
             </div>
           </CardContent>
         </Card>
+
         <Card className="border-0 shadow-sm ring-2 ring-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50">
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
@@ -365,7 +182,7 @@ export function IntegrityTab() {
                 Valid Responses
               </div>
               <div className="mt-1 text-xs text-emerald-600/60">
-                Passed all integrity checks
+                Passed all checks
               </div>
             </div>
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15">
@@ -381,15 +198,12 @@ export function IntegrityTab() {
           <div>
             <CardTitle className="text-lg">Participant Integrity Scores</CardTitle>
             <CardDescription>
-              Hover{" "}
-              <Info className="inline h-3 w-3 text-rose-500" /> on flagged rows
-              for reason · Click a row with answers to compare
+              Hover <Info className="inline h-3 w-3 text-rose-500" /> on flagged
+              rows for reason · Click a row to inspect responses
             </CardDescription>
           </div>
           <div className="flex items-center gap-3 pt-1">
-            <span className="text-sm text-muted-foreground">
-              Clean data only
-            </span>
+            <span className="text-sm text-muted-foreground">Clean data only</span>
             <button
               onClick={() => setShowOnlyClean(!showOnlyClean)}
               className={`relative h-6 w-11 rounded-full transition-colors ${
@@ -405,121 +219,140 @@ export function IntegrityTab() {
           </div>
         </CardHeader>
         <CardContent className="px-6 pb-6">
-          <div className="grid grid-cols-[140px_120px_1fr_1fr_80px] gap-4 border-b px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <div>Participant</div>
-            <div>Status</div>
-            <div>AI Detection</div>
-            <div>Bot Detection</div>
-            <div>Action</div>
-          </div>
-          {rows.map((e) => (
-            <div
-              key={e.id}
-              onClick={() => e.answers.length > 0 && setSelected(e)}
-              className={`grid grid-cols-[140px_120px_1fr_1fr_80px] items-center gap-4 border-b px-3 py-4 text-sm last:border-0 transition-colors ${
-                e.status === "FLAGGED"
-                  ? "bg-rose-50/60 hover:bg-rose-50"
-                  : "hover:bg-slate-50"
-              } ${e.answers.length > 0 ? "cursor-pointer" : ""}`}
-            >
-              <div>
-                <div className="font-mono text-xs text-muted-foreground">
-                  {e.id}
-                </div>
-                <div className="mt-0.5 text-[11px]">{e.country}</div>
-              </div>
-              <div className="flex items-center gap-1">
-                <Badge
-                  variant={
-                    e.status === "FLAGGED"
-                      ? "destructive"
-                      : e.status === "COMPLETED"
-                      ? "default"
-                      : "secondary"
-                  }
-                  className="text-[10px]"
-                >
-                  {e.status}
-                </Badge>
-                {e.flagReason && <WhyTooltip reason={e.flagReason} />}
-              </div>
-              <div>
-                {e.aiScore !== null ? (
-                  <ScoreBar value={e.aiScore} />
-                ) : (
-                  <span className="text-xs text-muted-foreground">Pending</span>
-                )}
-              </div>
-              <div>
-                {e.botScore !== null ? (
-                  <ScoreBar value={e.botScore} thresholdHigh={0.5} thresholdMid={0.25} />
-                ) : (
-                  <span className="text-xs text-muted-foreground">Pending</span>
-                )}
-              </div>
-              <div>
-                {e.answers.length > 0 && (
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                    Compare
-                  </Button>
-                )}
-              </div>
+          {enrollments.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No enrollments yet
             </div>
-          ))}
+          ) : (
+            <>
+              <div className="grid grid-cols-[160px_120px_1fr_1fr_80px] gap-4 border-b px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <div>Participant</div>
+                <div>Status</div>
+                <div>Quality Score</div>
+                <div>Similarity</div>
+                <div>Action</div>
+              </div>
+              {rows.map((e) => (
+                <div
+                  key={e.id}
+                  onClick={() => e.responses.length > 0 && setSelected(e)}
+                  className={`grid grid-cols-[160px_120px_1fr_1fr_80px] items-center gap-4 border-b px-3 py-4 text-sm last:border-0 transition-colors ${
+                    e.flagged || e.status === "FLAGGED"
+                      ? "bg-rose-50/60 hover:bg-rose-50"
+                      : "hover:bg-slate-50"
+                  } ${e.responses.length > 0 ? "cursor-pointer" : ""}`}
+                >
+                  <div className="font-mono text-xs text-muted-foreground truncate">
+                    {e.id}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Badge
+                      variant={
+                        e.status === "FLAGGED"
+                          ? "destructive"
+                          : e.status === "COMPLETED"
+                          ? "default"
+                          : "secondary"
+                      }
+                      className="text-[10px]"
+                    >
+                      {e.status}
+                    </Badge>
+                    {e.flagReason && <WhyTooltip reason={e.flagReason} />}
+                  </div>
+                  <div>
+                    {e.overallScore !== null ? (
+                      <ScoreBar value={e.overallScore} />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Pending</span>
+                    )}
+                  </div>
+                  <div>
+                    {e.similarityScore !== null ? (
+                      <ScoreBar value={e.similarityScore} />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">N/A</span>
+                    )}
+                  </div>
+                  <div>
+                    {e.responses.length > 0 && (
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                        Inspect
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </CardContent>
       </Card>
 
-      {/* Side-by-side comparison */}
+      {/* Response inspection panel */}
       {selected && (
         <Card className="border-0 shadow-sm ring-2 ring-violet-200 bg-gradient-to-br from-violet-50/40 to-purple-50/40">
           <CardHeader className="flex flex-row items-start justify-between px-6 pt-6 pb-4">
             <div>
-              <CardTitle>Side-by-Side Comparison</CardTitle>
+              <CardTitle>Response Inspection</CardTitle>
               <CardDescription>
-                Participant {selected.id} · Overall Quality Score:{" "}
+                Participant{" "}
+                <span className="font-mono">{selected.id}</span> · Overall:{" "}
                 <strong
                   className={
-                    selected.quality !== null && selected.quality < 0.45
+                    selected.overallScore !== null && selected.overallScore < 0.45
                       ? "text-rose-600"
                       : "text-emerald-600"
                   }
                 >
-                  {selected.quality?.toFixed(2)}
+                  {selected.overallScore?.toFixed(2) ?? "—"}
                 </strong>
+                {selected.similarityScore !== null && (
+                  <>
+                    {" "}· Similarity:{" "}
+                    <strong
+                      className={
+                        selected.similarityScore < 0.5 ? "text-rose-600" : "text-emerald-600"
+                      }
+                    >
+                      {selected.similarityScore.toFixed(2)}
+                    </strong>
+                  </>
+                )}
               </CardDescription>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelected(null)}
-            >
+            <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
               <X className="h-4 w-4" />
             </Button>
           </CardHeader>
-          <CardContent className="space-y-6 px-6 pb-6">
-            {selected.answers.map((a, i) => (
+          <CardContent className="space-y-5 px-6 pb-6">
+            {selected.responses.map((r, i) => (
               <div key={i}>
-                <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {a.question}
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {r.questionPrompt}
                 </div>
-                <div className="grid grid-cols-2 gap-5">
-                  <div className="rounded-xl border-2 border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="mb-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Participant Response
-                    </div>
-                    <p className="text-sm leading-relaxed">{a.answer}</p>
+                <div className="rounded-xl border-2 border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Response
+                    </span>
+                    {r.timeSpentMs !== null && (
+                      <span className="ml-auto text-[10px] text-muted-foreground">
+                        {Math.round(r.timeSpentMs / 1000)}s · {r.wordCount} words
+                      </span>
+                    )}
                   </div>
-                  <div className="rounded-xl border-2 border-dashed border-violet-200 bg-violet-50/50 p-5">
-                    <div className="mb-3 text-[10px] font-bold uppercase tracking-wider text-violet-600">
-                      Avg High-Quality Response
-                    </div>
-                    <p className="text-sm leading-relaxed italic text-muted-foreground">
-                      {a.ideal}
-                    </p>
-                  </div>
+                  <p className="text-sm leading-relaxed">{r.value || <em className="text-muted-foreground">No response</em>}</p>
                 </div>
               </div>
             ))}
+            {selected.similarityReason && (
+              <div className="rounded-xl border-2 border-rose-200 bg-rose-50/50 p-4">
+                <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-rose-600">
+                  Similarity Flag
+                </div>
+                <p className="text-sm leading-relaxed text-rose-800">{selected.similarityReason}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

@@ -94,7 +94,12 @@ function simColor(v: number): string {
   return `rgb(${Math.max(0, Math.min(255, r))}, ${Math.max(0, Math.min(255, g))}, ${Math.max(0, Math.min(255, b))})`;
 }
 
-export function LinguisticTab() {
+interface LinguisticTabProps {
+  enrollments: any[];
+  questionStats: any[];
+}
+
+export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps) {
   return (
     <div className="space-y-8">
       {/* Similarity matrix */}

@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { pool, generateId } from "./db";
+import { analyzeSimilarity } from "./similarity";
 
 function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -109,16 +110,56 @@ export async function scoreResponse(
   };
 }
 
+async function checkQuestionSimilarityThreshold(
+  enrollmentId: string,
+  client: any
+): Promise<boolean> {
+  // Get all questions answered by this enrollment with their similarity scores
+  const questionsResult = await client.query(
+    `SELECT DISTINCT r."questionId", qs."similarityScore"
+     FROM "Response" r
+     LEFT JOIN "QualityScore" qs ON qs."responseId" = r."id"
+     WHERE r."enrollmentId" = $1`,
+    [enrollmentId]
+  );
+
+  const questions = questionsResult.rows;
+  if (questions.length === 0) return true;
+
+  // Count how many questions have similarity >= 0.9
+  const questionsWithHighSimilarity = questions.filter((q: any) => 
+    q.similarityScore !== null && q.similarityScore >= 0.9
+  ).length;
+
+  const percentageHighSimilarity = questionsWithHighSimilarity / questions.length;
+
+  console.log(
+    `[similarity-threshold] ${questionsWithHighSimilarity}/${questions.length} questions (${(percentageHighSimilarity * 100).toFixed(1)}%) have >= 90% similarity`
+  );
+
+  // Flag if 70% or more questions have 90%+ similarity
+  if (percentageHighSimilarity >= 0.7) {
+    console.log(
+      `[similarity-threshold] Enrollment ${enrollmentId}: flagged (${(percentageHighSimilarity * 100).toFixed(1)}% >= 70%)`
+    );
+    return false;
+  }
+
+  return true; // Enrollment passed similarity threshold
+}
+
 export async function triggerScoringPipeline(
   enrollmentId: string,
   responseIds: string[]
 ) {
-  // Fetch responses with their question prompts
+  // Fetch responses with question prompts, questionId, and studyId
   const responsesResult = await pool.query(
-    `SELECT r."id", r."value", r."timeSpentMs", q."prompt"
-    FROM "Response" r
-    JOIN "Question" q ON q."id" = r."questionId"
-    WHERE r."id" = ANY($1)`,
+    `SELECT r."id", r."value", r."timeSpentMs", r."questionId",
+            q."prompt", e."studyId"
+     FROM "Response" r
+     JOIN "Question" q  ON q."id" = r."questionId"
+     JOIN "Enrollment" e ON e."id" = r."enrollmentId"
+     WHERE r."id" = ANY($1)`,
     [responseIds]
   );
 
@@ -134,6 +175,7 @@ export async function triggerScoringPipeline(
     await client.query("BEGIN");
 
     for (const response of responses) {
+      // ── 1. Quality scoring (existing) ─────────────────────────────
       const score = await scoreResponse({
         question: response.prompt,
         answer: response.value,
@@ -141,10 +183,48 @@ export async function triggerScoringPipeline(
         allResponsesInEnrollment: allResponses,
       });
 
+      // ── 2. RAG similarity analysis (new) ──────────────────────────
+      // Runs outside the DB transaction so a Pinecone failure doesn't
+      // roll back the quality scores.
+      let simScore: number | null = null;
+      let simReason: string | null = null;
+      try {
+        const sim = await analyzeSimilarity({
+          responseId: response.id,
+          questionId: response.questionId,
+          enrollmentId,
+          studyId: response.studyId,
+          questionPrompt: response.prompt,
+          responseText: response.value,
+        });
+        if (sim) {
+          simScore = sim.similarityScore;
+          simReason = sim.similarityReason;
+        }
+      } catch (err) {
+        console.error("[similarity] pipeline error (non-fatal):", err);
+      }
+
+      // ── 3. Persist both scores ─────────────────────────────────────
       const scoreId = generateId();
       await client.query(
-        'INSERT INTO "QualityScore" ("id", "responseId", "overallScore", "coherenceScore", "effortScore", "consistencyScore", "flagged", "flagReason", "scoredAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())',
-        [scoreId, response.id, score.overallScore, score.coherenceScore, score.effortScore, score.consistencyScore, score.flagged, score.flagReason]
+        `INSERT INTO "QualityScore"
+           ("id", "responseId", "overallScore", "coherenceScore", "effortScore",
+            "consistencyScore", "similarityScore", "flagged", "flagReason",
+            "similarityReason", "scoredAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, NOW())`,
+        [
+          scoreId,
+          response.id,
+          score.overallScore,
+          score.coherenceScore,
+          score.effortScore,
+          score.consistencyScore,
+          simScore,
+          score.flagged,
+          score.flagReason,
+          simReason,
+        ]
       );
     }
 
@@ -160,7 +240,13 @@ export async function triggerScoringPipeline(
     const avgScore =
       allScores.reduce((sum, s) => sum + parseFloat(s.overallScore), 0) / allScores.length;
 
-    if (avgScore < 0.5) {
+    // Check if question-level similarity threshold is met
+    const similarityThresholdPassed = await checkQuestionSimilarityThreshold(
+      enrollmentId,
+      client
+    );
+
+    if (avgScore < 0.5 || !similarityThresholdPassed) {
       await client.query(
         'UPDATE "Enrollment" SET "status" = $1 WHERE "id" = $2',
         ["FLAGGED", enrollmentId]
