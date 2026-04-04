@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
+import { detectAndStoreReversePairs } from "@/lib/quality";
 
 export async function PATCH(
   req: Request,
@@ -25,7 +26,23 @@ export async function PATCH(
   );
   const study = result.rows[0];
 
+  // When publishing (ACTIVE), auto-detect reverse-scored pairs
+  let reversePairs: { construct: string; relationship: string }[] = [];
+  if (status === "ACTIVE") {
+    try {
+      const pairs = await detectAndStoreReversePairs(studyId);
+      reversePairs = pairs.map((p) => ({
+        construct: p.construct,
+        relationship: p.relationship,
+      }));
+    } catch (err) {
+      console.error("Reverse pair detection failed (non-fatal):", err);
+    }
+  }
+
   return NextResponse.json({
     study: { id: study.id, status: study.status },
+    reversePairsDetected: reversePairs.length,
+    reversePairs,
   });
 }

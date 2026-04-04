@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
-import { generateReverseItems } from "@/lib/quality";
+import { recommendReverseQuestions } from "@/lib/quality";
 
+// POST — recommend reverse-scored attention checks for a study being created/edited
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ studyId: string }> }
@@ -15,7 +16,6 @@ export async function POST(
 
   const { studyId } = await params;
 
-  // Verify the researcher owns this study
   const researcherId = (session.user as { id: string }).id;
   const studyResult = await pool.query(
     'SELECT "id" FROM "Study" WHERE "id" = $1 AND "researcherId" = $2',
@@ -25,14 +25,55 @@ export async function POST(
     return NextResponse.json({ error: "Study not found" }, { status: 404 });
   }
 
-  const body = await req.json().catch(() => ({}));
-  const count = Math.min(Math.max(body.count ?? 2, 1), 5);
+  const questionsResult = await pool.query(
+    `SELECT "prompt", "type", "options", "config"
+     FROM "Question" WHERE "studyId" = $1 ORDER BY "order"`,
+    [studyId]
+  );
 
-  const items = await generateReverseItems(studyId, count);
+  if (questionsResult.rows.length < 5) {
+    return NextResponse.json({
+      studyId,
+      recommendations: [],
+      message: "Add at least 5 questions before requesting reverse-scored recommendations.",
+    });
+  }
+
+  const items = await recommendReverseQuestions(questionsResult.rows);
 
   return NextResponse.json({
     studyId,
-    generatedItems: items,
-    usage: "Review these suggestions, then POST to /api/studies/{studyId} to add them as questions.",
+    recommendations: items,
+    message: items.length > 0
+      ? `We recommend adding ${items.length} reverse-scored attention check(s) to improve data quality. Review these suggestions and add them to your survey.`
+      : "Your survey already appears to have adequate attention checks.",
+  });
+}
+
+// GET — check stored reverse pairs for a published study
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ studyId: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { studyId } = await params;
+
+  const pairsResult = await pool.query(
+    `SELECT rp."id", rp."construct", rp."relationship",
+            qa."prompt" AS "questionAPrompt", qb."prompt" AS "questionBPrompt"
+     FROM "ReversePair" rp
+     JOIN "Question" qa ON qa."id" = rp."questionAId"
+     JOIN "Question" qb ON qb."id" = rp."questionBId"
+     WHERE rp."studyId" = $1`,
+    [studyId]
+  );
+
+  return NextResponse.json({
+    studyId,
+    reversePairs: pairsResult.rows,
   });
 }
