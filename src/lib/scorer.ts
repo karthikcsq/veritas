@@ -127,7 +127,7 @@ function buildValidityPrompt(
       ? "This is a short-answer question. The answer should be a brief, on-topic response."
       : "This is a long-form question. The answer should address the topic with some substance.";
 
-  return `You evaluate whether a survey answer actually responds to the question that was asked.
+  return `You evaluate whether a survey answer is a reasonable attempt at responding to the question asked. Be generous — people answer casually and that is perfectly fine.
 
 ${typeGuidance}
 
@@ -138,18 +138,18 @@ ANSWER:
 ${answer}
 
 Score the answer's VALIDITY from 0 to 100:
-- 0–20: Completely irrelevant. The answer has nothing to do with the question (e.g. random words, copy-paste from elsewhere, answering a totally different question).
-- 21–40: Marginally related. Mentions a related topic but does not answer what was asked.
-- 41–60: Partially valid. Addresses part of the question but misses key aspects or is vague.
-- 61–80: Mostly valid. Clearly responds to the question with minor gaps.
-- 81–100: Fully valid. Directly and clearly addresses what the question asked.
+- 0–15: Completely off-topic. The answer has nothing to do with the question (e.g. random text, copy-paste spam, answering a totally different question).
+- 16–35: Barely related. Mentions a vaguely related topic but clearly doesn't attempt to answer what was asked.
+- 36–55: Loosely valid. Touches on the topic but misses the core of the question.
+- 56–80: Reasonably valid. A genuine attempt to answer, even if brief or informal.
+- 81–100: Clearly valid. Directly addresses what the question asked.
 
-Focus ONLY on whether the answer is a genuine attempt to respond to this specific question. Do NOT judge grammar, spelling, depth, or effort — only topical relevance and semantic connection to the question.
+Be lenient with casual, short, or informal answers — as long as the person is genuinely trying to respond to the question, score generously. Do NOT judge grammar, spelling, depth, or effort — only whether the answer is on-topic.
 
 Respond ONLY with valid JSON:
 {
   "score": 0,
-  "explanation": "Brief one-sentence reason for the score"
+  "explanation": "Brief friendly one-sentence reason"
 }`;
 }
 
@@ -167,8 +167,8 @@ export async function checkResponseValidity(
     return { score: 0, explanation: "Empty response." };
   }
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  const completion = await getOpenAI().chat.completions.create({
+    model: "gpt-5.4-nano",
     messages: [
       {
         role: "user",
@@ -177,7 +177,7 @@ export async function checkResponseValidity(
     ],
     response_format: { type: "json_object" },
     temperature: 0.1,
-    max_tokens: 150,
+    max_completion_tokens: 150,
   });
 
   const result = JSON.parse(completion.choices[0].message.content!);
@@ -262,8 +262,8 @@ export async function checkContradictions(
     };
   }
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  const completion = await getOpenAI().chat.completions.create({
+    model: "gpt-5.4-nano",
     messages: [
       {
         role: "user",
@@ -272,7 +272,7 @@ export async function checkContradictions(
     ],
     response_format: { type: "json_object" },
     temperature: 0.1,
-    max_tokens: 800,
+    max_completion_tokens: 800,
   });
 
   const result = JSON.parse(completion.choices[0].message.content!);

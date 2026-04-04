@@ -6,7 +6,7 @@ import {
   type IDKitResult,
   type RpContext,
 } from "@worldcoin/idkit";
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -22,6 +22,11 @@ interface PublicStudy {
 }
 
 const DEFAULT_APP_ID = process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}` | undefined;
+const IS_DEV = process.env.NODE_ENV !== "production";
+
+function enrollmentKey(studyId: string) {
+  return `veritas_enrollment_${studyId}`;
+}
 
 async function getRpContext(action: string): Promise<{ rp_id: string } & RpContext> {
   const res = await fetch("/api/world-id/rp-signature", {
@@ -59,21 +64,38 @@ export default function StudyEnrollPage() {
   const [loadingStudy, setLoadingStudy] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [enrollmentId, setEnrollmentId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const rpContextRef = useRef<RpContext | null>(null);
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
+  const enrollmentIdRef = useRef<string | null>(null);
 
-  const preset = orbLegacy();
+  const preset = useMemo(() => orbLegacy(), []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(enrollmentKey(studyId));
+    if (stored) {
+      setEnrollmentId(stored);
+      return;
+    }
+
+    if (IS_DEV) {
+      fetch(`/api/studies/${studyId}/dev-enroll`, { method: "POST" })
+        .then((res) => (res.ok ? res.json() : Promise.reject()))
+        .then((data: { enrollmentId: string }) => {
+          localStorage.setItem(enrollmentKey(studyId), data.enrollmentId);
+          setEnrollmentId(data.enrollmentId);
+        })
+        .catch(() => {});
+    }
+  }, [studyId]);
 
   useEffect(() => {
     async function loadStudy() {
       try {
         const response = await fetch(`/api/studies/${studyId}/public`);
-        if (!response.ok) {
-          throw new Error("Failed to load study");
-        }
-
+        if (!response.ok) throw new Error("Failed to load study");
         const payload = (await response.json()) as { study: PublicStudy };
         setStudy(payload.study);
       } catch (err) {
@@ -84,9 +106,7 @@ export default function StudyEnrollPage() {
       }
     }
 
-    if (studyId) {
-      void loadStudy();
-    }
+    if (studyId) void loadStudy();
   }, [studyId]);
 
   const verifyOnBackend = useCallback(
@@ -94,14 +114,13 @@ export default function StudyEnrollPage() {
       const response = await fetch(`/api/studies/${studyId}/enroll`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          idkitResponse: result,
-        }),
+        body: JSON.stringify({ idkitResponse: result }),
       });
 
-      if (!response.ok) {
-        throw new Error("Backend verification failed");
-      }
+      if (!response.ok) throw new Error("Backend verification failed");
+
+      const data = await response.json();
+      enrollmentIdRef.current = data.enrollmentId;
     },
     [studyId],
   );
@@ -127,6 +146,18 @@ export default function StudyEnrollPage() {
     }
   };
 
+  const handleVerificationSuccess = () => {
+    const eid = enrollmentIdRef.current;
+    if (eid) {
+      localStorage.setItem(enrollmentKey(studyId), eid);
+      setEnrollmentId(eid);
+    }
+  };
+
+  const handleStartSurvey = () => {
+    router.push(`/study/${studyId}/survey?enrollmentId=${enrollmentId}`);
+  };
+
   const onOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) {
@@ -137,7 +168,7 @@ export default function StudyEnrollPage() {
 
   if (loadingStudy) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-muted/30">
+      <div className="flex-1 flex items-center justify-center px-4">
         <p className="text-sm text-muted-foreground">Loading study...</p>
       </div>
     );
@@ -145,14 +176,16 @@ export default function StudyEnrollPage() {
 
   if (!study) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-muted/30">
+      <div className="flex-1 flex items-center justify-center px-4">
         <p className="text-sm text-destructive">{error ?? "Study not found."}</p>
       </div>
     );
   }
 
+  const isEnrolled = Boolean(enrollmentId);
+
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-muted/30">
+    <div className="flex-1 flex items-center justify-center px-4 py-8">
       <Card className="w-full max-w-lg">
         <CardHeader className="text-center">
           <div className="mx-auto h-10 w-10 rounded-lg bg-primary flex items-center justify-center mb-2">
@@ -164,7 +197,6 @@ export default function StudyEnrollPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Study info */}
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-lg border p-4 text-center">
               <div className="text-2xl font-bold">
@@ -180,27 +212,44 @@ export default function StudyEnrollPage() {
             </div>
           </div>
 
-          {/* Verification info */}
-          <div className="rounded-lg border border-dashed p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">World ID Required</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              This study uses World ID to verify that each participant is a
-              unique real person. Your identity remains completely anonymous — no
-              personal information is stored.
-            </p>
-          </div>
+          {isEnrolled ? (
+            <>
+              <div className="rounded-lg border border-dashed p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">Verified</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  You&apos;ve been verified with World ID. You can now begin the
+                  survey.
+                </p>
+              </div>
+              <Button size="lg" className="w-full" onClick={handleStartSurvey}>
+                Start Survey
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="rounded-lg border border-dashed p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">World ID Required</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  This study uses World ID to verify that each participant is a
+                  unique real person. Your identity remains completely
+                  anonymous — no personal information is stored.
+                </p>
+              </div>
+              <Button
+                size="lg"
+                className="w-full"
+                onClick={startVerification}
+                disabled={starting}
+              >
+                {starting ? "Preparing…" : "Verify with World ID"}
+              </Button>
+            </>
+          )}
 
-          {/* CTA */}
-          <Button
-            size="lg"
-            className="w-full"
-            onClick={startVerification}
-            disabled={starting}
-          >
-            {starting ? "Preparing…" : "Verify with World ID to Enroll"}
-          </Button>
           {error ? (
             <p className="text-sm text-center text-destructive">{error}</p>
           ) : null}
@@ -215,9 +264,7 @@ export default function StudyEnrollPage() {
               allow_legacy_proofs
               preset={preset}
               handleVerify={verifyOnBackend}
-              onSuccess={() => {
-                router.push(`/study/${studyId}/survey`);
-              }}
+              onSuccess={handleVerificationSuccess}
             />
           ) : null}
 

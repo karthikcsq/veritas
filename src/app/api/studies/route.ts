@@ -19,8 +19,8 @@ export async function POST(req: Request) {
 
     const studyId = generateId();
     const studyResult = await client.query(
-      'INSERT INTO "Study" ("id", "researcherId", "title", "description", "status", "targetCount", "compensationUsd", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) RETURNING "id", "title", "status"',
-      [studyId, researcherId, body.title, body.description, "DRAFT", body.targetCount, body.compensationUsd]
+      'INSERT INTO "Study" ("id", "researcherId", "title", "description", "status", "publiclyListed", "targetCount", "compensationUsd", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()) RETURNING "id", "title", "status"',
+      [studyId, researcherId, body.title, body.description, "DRAFT", body.publiclyListed ?? false, body.targetCount, body.compensationUsd]
     );
     const study = studyResult.rows[0];
 
