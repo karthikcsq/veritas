@@ -163,6 +163,21 @@ export default function NewStudyPage() {
       if (qa) {
         setQualityResult(qa);
         setCreatedStudyId(data.study.id);
+        // Scroll to first recommendation after React renders
+        if (qa.recommendations?.length > 0) {
+          const firstOriginal = qa.recommendations[0].originalPrompt;
+          const idx = questions.findIndex((q) => q.prompt === firstOriginal);
+          if (idx >= 0) {
+            setTimeout(() => {
+              document.getElementById(`rec-${idx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 200);
+          }
+        } else {
+          // No recommendations — scroll to the summary card
+          setTimeout(() => {
+            document.getElementById("quality-summary")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 200);
+        }
       } else {
         router.push(`/dashboard/studies/${data.study.id}`);
       }
@@ -545,7 +560,7 @@ export default function NewStudyPage() {
 
         {/* Quality summary + continue */}
         {qualityResult && createdStudyId && (
-          <Card className="border-2 border-violet-300 bg-violet-50">
+          <Card id="quality-summary" className="border-2 border-violet-300 bg-violet-50">
             <CardContent className="py-4 space-y-3">
               <p className="text-sm font-medium text-violet-900">{qualityResult.message}</p>
               {qualityResult.reversePairsDetected > 0 && (
