@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Researcher {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  studies Study[]
+}
+
+model Study {
+  id              String      @id @default(cuid())
+  researcherId    String
+  title           String
+  description     String
+  status          StudyStatus @default(DRAFT)
+  targetCount     Int
+  compensationUsd Float
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  researcher  Researcher   @relation(fields: [researcherId], references: [id])
+  questions   Question[]
+  enrollments Enrollment[]
+}
+
+enum StudyStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+model Question {
+  id      String       @id @default(cuid())
+  studyId String
+  order   Int
+  type    QuestionType
+  prompt  String
+  options Json?
+
+  study     Study      @relation(fields: [studyId], references: [id])
+  responses Response[]
+}
+
+enum QuestionType {
+  SHORT_TEXT
+  LONG_TEXT
+  MULTIPLE_CHOICE
+  SCALE
+}
+
+model Participant {
+  id            String   @id @default(cuid())
+  nullifierHash String   @unique
+  createdAt     DateTime @default(now())
+
+  enrollments Enrollment[]
+}
+
+model Enrollment {
+  id            String           @id @default(cuid())
+  participantId String
+  studyId       String
+  status        EnrollmentStatus @default(VERIFIED)
+  worldIdProof  Json
+  enrolledAt    DateTime         @default(now())
+  completedAt   DateTime?
+
+  participant Participant @relation(fields: [participantId], references: [id])
+  study       Study       @relation(fields: [studyId], references: [id])
+  responses   Response[]
+
+  @@unique([participantId, studyId])
+}
+
+enum EnrollmentStatus {
+  VERIFIED
+  IN_PROGRESS
+  COMPLETED
+  FLAGGED
+}
+
+model Response {
+  id           String   @id @default(cuid())
+  enrollmentId String
+  questionId   String
+  value        String
+  timeSpentMs  Int
+  submittedAt  DateTime @default(now())
+
+  enrollment   Enrollment    @relation(fields: [enrollmentId], references: [id])
+  question     Question      @relation(fields: [questionId], references: [id])
+  qualityScore QualityScore?
+}
+
+model QualityScore {
+  id               String   @id @default(cuid())
+  responseId       String   @unique
+  overallScore     Float
+  coherenceScore   Float
+  effortScore      Float
+  consistencyScore Float
+  flagged          Boolean  @default(false)
+  flagReason       String?
+  scoredAt         DateTime @default(now())
+
+  response Response @relation(fields: [responseId], references: [id])
+}
