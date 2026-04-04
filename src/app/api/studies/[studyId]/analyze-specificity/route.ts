@@ -17,7 +17,7 @@ export async function POST(
 
   const [studyResult, questionsResult] = await Promise.all([
     pool.query('SELECT "description" FROM "Study" WHERE "id" = $1', [studyId]),
-    pool.query('SELECT "prompt", "type" FROM "Question" WHERE "studyId" = $1 ORDER BY "order"', [studyId]),
+    pool.query('SELECT "prompt", "type", "options", "config" FROM "Question" WHERE "studyId" = $1 ORDER BY "order"', [studyId]),
   ]);
 
   const studyDescription = studyResult.rows[0]?.description ?? "";

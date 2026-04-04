@@ -518,7 +518,7 @@ If the survey already has 2+ reverse pairs, return an empty newItems array.`,
 // ---------------------------------------------------------------------------
 
 export async function analyzeSpecificity(
-  questions: Array<{ prompt: string; type: string }>,
+  questions: Array<{ prompt: string; type: string; options?: string[] | null; config?: { scale?: { min: number; max: number; minLabel?: string; maxLabel?: string } } | null }>,
   studyDescription: string = ""
 ): Promise<SpecificityResult> {
   if (questions.length < 3) {
@@ -527,7 +527,7 @@ export async function analyzeSpecificity(
 
   // Pull sample questions from validated surveys as reference
   const refResult = await pool.query(
-    `SELECT q."prompt", q."type", s."title" AS "studyTitle"
+    `SELECT q."prompt", q."type", q."config", s."title" AS "studyTitle"
      FROM "Question" q
      JOIN "Study" s ON s."id" = q."studyId"
      WHERE s."id" IN ('survey_phq9', 'survey_gad7', 'survey_bpi', 'survey_factg', 'survey_isi')
@@ -536,15 +536,30 @@ export async function analyzeSpecificity(
   );
 
   const referenceExamples = refResult.rows
-    .map((r) => `[${r.studyTitle}] "${r.prompt}"`)
+    .map((r) => {
+      let desc = `[${r.studyTitle}] "${r.prompt}" (${r.type})`;
+      if (r.config?.scale) desc += ` Scale: ${r.config.scale.min}-${r.config.scale.max}, "${r.config.scale.minLabel ?? ""}" to "${r.config.scale.maxLabel ?? ""}"`;
+      return desc;
+    })
     .join("\n");
 
   const userQuestions = questions
-    .map((q, i) => `[Q${i + 1}] Type: ${q.type} | "${q.prompt}"`)
+    .map((q, i) => {
+      let desc = `[Q${i + 1}] "${q.prompt}" (${q.type})`;
+      if (q.type === "SCALE") {
+        const sc = q.config?.scale ?? { min: 1, max: 10 };
+        desc += ` Scale: ${sc.min}-${sc.max}`;
+        if (sc.minLabel || sc.maxLabel) desc += `, "${sc.minLabel ?? ""}" to "${sc.maxLabel ?? ""}"`;
+      }
+      if (q.type === "MULTIPLE_CHOICE" || q.type === "CHECKBOX") {
+        desc += ` Options: ${JSON.stringify(q.options ?? [])}`;
+      }
+      return desc;
+    })
     .join("\n");
 
   const studyContext = studyDescription
-    ? `\nSTUDY DESCRIPTION (provided by researcher):\n"${studyDescription}"\n\nThe questions should be consistent with this description. If the description mentions a specific timeframe (e.g., "over the past month"), questions should use that same timeframe, not a different one.\n`
+    ? `\nSTUDY DESCRIPTION (provided by researcher):\n"${studyDescription}"\n\nThe questions MUST be consistent with this description. If the description mentions a specific timeframe (e.g., "over the past month"), questions should reference that same timeframe.\n`
     : "";
 
   const completion = await getOpenAI().chat.completions.create({
@@ -552,27 +567,38 @@ export async function analyzeSpecificity(
     messages: [
       {
         role: "user",
-        content: `You are a clinical survey design expert. Compare the researcher's draft questions against these validated clinical survey examples for SPECIFICITY and CLARITY.
+        content: `You are a clinical survey design expert. Review the researcher's questions for SPECIFICITY, CLARITY, and whether the question MAKES SENSE with its response format.
 ${studyContext}
-REFERENCE EXAMPLES (from validated instruments):
+REFERENCE EXAMPLES (from validated instruments — notice how the question wording matches the response format):
 ${referenceExamples}
 
 RESEARCHER'S QUESTIONS:
 ${userQuestions}
 
 Analyze each question for:
-- Is it specific enough? Vague questions like "How do you feel?" produce unreliable data. Good questions specify the construct, timeframe, and context (e.g., "I have been feeling sad or down" vs "How is your mood?")
-- Does the timeframe match the study description? If the study says "past month", questions should reference "past month" not "past 24 hours" or "past week"
-- Does it match the precision level of validated clinical instruments?
-- Could it be misinterpreted by participants?
 
-ONLY flag questions that genuinely need improvement. If a question is already specific and clear, do NOT suggest changes. Most well-written questions should pass.
+1. QUESTION-SCALE COHERENCE: Does the question make sense with its response format?
+   - A 0-10 numeric scale works for INTENSITY (e.g., "Rate your pain level")
+   - A 0-4 "Not at all" to "Nearly every day" scale works for FREQUENCY (e.g., "I have been feeling sad")
+   - A 1-5 "Very poor" to "Very good" scale works for EVALUATION
+   - If the question asks about frequency but the scale measures intensity (or vice versa), flag it
+
+2. SPECIFICITY: Is the question specific enough?
+   - Vague: "How do you feel?" → Better: "Over the past month, how much has pain interfered with your daily activities?"
+   - Missing timeframe: "I have pain" → Better: "Over the past month, I have experienced pain"
+
+3. TIMEFRAME CONSISTENCY: Does the timeframe match the study description?
+
+4. CLARITY: Could participants misinterpret the question?
+
+ONLY flag questions that genuinely need improvement. If a question is clear and its wording fits its scale, do NOT suggest changes.
 
 For each flagged question, provide a rewritten version that:
-- Keeps the same meaning and construct
+- Keeps the same construct and intent
 - Matches the style/tone of the original
-- Uses the timeframe from the study description if one is specified
-- Adds specificity (timeframe, context, behavioral anchors)
+- Works naturally with the question's response format (scale range, labels)
+- Uses the correct timeframe from the study description
+- Do NOT change the scale/type — only rewrite the question text
 
 Respond ONLY with valid JSON:
 {
@@ -581,12 +607,12 @@ Respond ONLY with valid JSON:
       "questionIndex": 0,
       "originalPrompt": "the original question",
       "suggestedPrompt": "the improved version",
-      "reason": "One sentence explaining what was vague and what you improved"
+      "reason": "One sentence: what was wrong and what you fixed"
     }
   ]
 }
 
-If all questions are already specific enough, return an empty suggestions array.`,
+If all questions are already good, return an empty suggestions array.`,
       },
     ],
     response_format: { type: "json_object" },
