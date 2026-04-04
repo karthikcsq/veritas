@@ -518,7 +518,8 @@ If the survey already has 2+ reverse pairs, return an empty newItems array.`,
 // ---------------------------------------------------------------------------
 
 export async function analyzeSpecificity(
-  questions: Array<{ prompt: string; type: string }>
+  questions: Array<{ prompt: string; type: string }>,
+  studyDescription: string = ""
 ): Promise<SpecificityResult> {
   if (questions.length < 3) {
     return { suggestions: [], message: "Add more questions to analyze specificity." };
@@ -542,13 +543,17 @@ export async function analyzeSpecificity(
     .map((q, i) => `[Q${i + 1}] Type: ${q.type} | "${q.prompt}"`)
     .join("\n");
 
+  const studyContext = studyDescription
+    ? `\nSTUDY DESCRIPTION (provided by researcher):\n"${studyDescription}"\n\nThe questions should be consistent with this description. If the description mentions a specific timeframe (e.g., "over the past month"), questions should use that same timeframe, not a different one.\n`
+    : "";
+
   const completion = await getOpenAI().chat.completions.create({
     model: "gpt-5.4-mini",
     messages: [
       {
         role: "user",
         content: `You are a clinical survey design expert. Compare the researcher's draft questions against these validated clinical survey examples for SPECIFICITY and CLARITY.
-
+${studyContext}
 REFERENCE EXAMPLES (from validated instruments):
 ${referenceExamples}
 
@@ -557,6 +562,7 @@ ${userQuestions}
 
 Analyze each question for:
 - Is it specific enough? Vague questions like "How do you feel?" produce unreliable data. Good questions specify the construct, timeframe, and context (e.g., "I have been feeling sad or down" vs "How is your mood?")
+- Does the timeframe match the study description? If the study says "past month", questions should reference "past month" not "past 24 hours" or "past week"
 - Does it match the precision level of validated clinical instruments?
 - Could it be misinterpreted by participants?
 
@@ -565,6 +571,7 @@ ONLY flag questions that genuinely need improvement. If a question is already sp
 For each flagged question, provide a rewritten version that:
 - Keeps the same meaning and construct
 - Matches the style/tone of the original
+- Uses the timeframe from the study description if one is specified
 - Adds specificity (timeframe, context, behavioral anchors)
 
 Respond ONLY with valid JSON:

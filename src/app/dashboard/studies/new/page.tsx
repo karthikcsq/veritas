@@ -260,15 +260,20 @@ export default function NewStudyPage() {
     if (!createdStudyId) return;
     setAcceptedSpecificity((prev) => new Set(prev).add(suggestion.questionIndex));
 
+    // Update the question text in local state
+    const updated = [...questions];
+    if (updated[suggestion.questionIndex]) {
+      updated[suggestion.questionIndex] = { ...updated[suggestion.questionIndex], prompt: suggestion.suggestedPrompt };
+      setQuestions(updated);
+    }
+
     // Update the question in DB
-    fetch(`/api/studies/${createdStudyId}/add-question`, {
-      method: "POST",
+    fetch(`/api/studies/${createdStudyId}/update-question`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        type: questions[suggestion.questionIndex]?.type ?? "SCALE",
+        questionOrder: suggestion.questionIndex + 1,
         prompt: suggestion.suggestedPrompt,
-        order: suggestion.questionIndex + 1,
-        required: true,
       }),
     }).catch(console.error);
 
