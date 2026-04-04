@@ -159,8 +159,8 @@ export default function NewStudyPage() {
       const data = await res.json();
       const qa = data.qualityAnalysis;
 
-      // If there are recommendations, show them before navigating
-      if (qa?.recommendations?.length > 0) {
+      // Always show quality results before navigating
+      if (qa) {
         setQualityResult(qa);
         setCreatedStudyId(data.study.id);
       } else {
@@ -527,9 +527,20 @@ export default function NewStudyPage() {
             <p className="text-sm text-destructive text-center">{error}</p>
           )}
 
-          <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-            {submitting ? "Creating..." : "Create Study"}
-          </Button>
+          {submitting ? (
+            <div className="w-full space-y-2">
+              <div className="text-sm text-center text-muted-foreground font-medium">
+                Checking for reverse-score recommendations...
+              </div>
+              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div className="h-full bg-violet-500 rounded-full animate-pulse" style={{ width: "100%" }} />
+              </div>
+            </div>
+          ) : (
+            <Button type="submit" size="lg" className="w-full" disabled={!!qualityResult}>
+              Create Study
+            </Button>
+          )}
         </form>
 
         {/* Quality summary + continue */}
