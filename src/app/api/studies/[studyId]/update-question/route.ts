@@ -24,11 +24,16 @@ export async function PATCH(
     return NextResponse.json({ error: "Study not found" }, { status: 404 });
   }
 
-  const { questionOrder, prompt } = await req.json();
+  const { questionOrder, prompt, type, config } = await req.json();
 
   const result = await pool.query(
-    'UPDATE "Question" SET "prompt" = $1 WHERE "studyId" = $2 AND "order" = $3 RETURNING "id", "prompt"',
-    [prompt, studyId, questionOrder]
+    `UPDATE "Question"
+     SET "prompt" = $1,
+         "type" = COALESCE($4, "type"),
+         "config" = COALESCE($5, "config")
+     WHERE "studyId" = $2 AND "order" = $3
+     RETURNING "id", "prompt", "type", "config"`,
+    [prompt, studyId, questionOrder, type ?? null, config ? JSON.stringify(config) : null]
   );
 
   if (result.rows.length === 0) {

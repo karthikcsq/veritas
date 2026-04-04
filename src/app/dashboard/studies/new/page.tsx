@@ -45,12 +45,31 @@ export default function NewStudyPage() {
     message: string;
   } | null>(null);
   const [specificityResult, setSpecificityResult] = useState<{
-    suggestions: Array<{ questionIndex: number; originalPrompt: string; suggestedPrompt: string; reason: string }>;
+    suggestions: Array<{
+      questionIndex: number;
+      originalPrompt: string;
+      suggestedPrompt: string;
+      reason: string;
+      suggestedType?: string;
+      suggestedConfig?: { scale?: { min: number; max: number; minLabel?: string; maxLabel?: string } } | null;
+    }>;
     message: string;
   } | null>(null);
   const [acceptedSpecificity, setAcceptedSpecificity] = useState<Set<number>>(new Set());
   const [createdStudyId, setCreatedStudyId] = useState<string | null>(null);
   const [acceptedRecs, setAcceptedRecs] = useState<Set<string>>(new Set());
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  function handleDrop(dropIdx: number) {
+    if (dragIdx === null || dragIdx === dropIdx) return;
+    const updated = [...questions];
+    const [moved] = updated.splice(dragIdx, 1);
+    updated.splice(dropIdx, 0, moved);
+    setQuestions(updated.map((q, i) => ({ ...q, order: i + 1 })));
+    setDragIdx(null);
+    setDragOverIdx(null);
+  }
 
   function acceptRecommendation(rec: NonNullable<typeof qualityResult>["recommendations"][number]) {
     if (!createdStudyId) return;
@@ -260,21 +279,39 @@ export default function NewStudyPage() {
     if (!createdStudyId) return;
     setAcceptedSpecificity((prev) => new Set(prev).add(suggestion.questionIndex));
 
-    // Update the question text in local state
+    // Update the question in local state (prompt + optional type/config)
     const updated = [...questions];
     if (updated[suggestion.questionIndex]) {
-      updated[suggestion.questionIndex] = { ...updated[suggestion.questionIndex], prompt: suggestion.suggestedPrompt };
+      const patch: Partial<QuestionDraft> = { prompt: suggestion.suggestedPrompt };
+      if (suggestion.suggestedType) {
+        patch.type = suggestion.suggestedType;
+        if (suggestion.suggestedType === "SCALE" && suggestion.suggestedConfig?.scale) {
+          patch.scaleConfig = suggestion.suggestedConfig.scale;
+        } else if (suggestion.suggestedType !== "SCALE") {
+          patch.scaleConfig = undefined;
+        }
+      } else if (suggestion.suggestedConfig?.scale) {
+        patch.scaleConfig = suggestion.suggestedConfig.scale;
+      }
+      updated[suggestion.questionIndex] = { ...updated[suggestion.questionIndex], ...patch };
       setQuestions(updated);
     }
 
-    // Update the question in DB
+    // Update the question in DB (prompt + optional type/config)
+    const body: Record<string, unknown> = {
+      questionOrder: suggestion.questionIndex + 1,
+      prompt: suggestion.suggestedPrompt,
+    };
+    if (suggestion.suggestedType) {
+      body.type = suggestion.suggestedType;
+    }
+    if (suggestion.suggestedConfig) {
+      body.config = suggestion.suggestedConfig;
+    }
     fetch(`/api/studies/${createdStudyId}/update-question`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        questionOrder: suggestion.questionIndex + 1,
-        prompt: suggestion.suggestedPrompt,
-      }),
+      body: JSON.stringify(body),
     }).catch(console.error);
 
     // Check if all specificity suggestions handled
@@ -387,15 +424,28 @@ export default function NewStudyPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {questions.map((q, i) => {
-                // Find recommendation that targets this question
+                // Find recommendation that targets this question's order position
                 const rec = qualityResult?.recommendations.find(
-                  (r) => r.originalPrompt === q.prompt && !acceptedRecs.has(r.originalPrompt)
+                  (r) => r.suggestedOrder === q.order && !acceptedRecs.has(r.originalPrompt)
                 );
+                const recPair = rec ? qualityResult?.reversePairs.find(
+                  (p) => qualityResult?.recommendations.some(
+                    (r) => r.originalPrompt === rec.originalPrompt && (p.construct.toLowerCase().includes(rec.originalPrompt.slice(0, 20).toLowerCase()) || true)
+                  )
+                ) : null;
                 return (
-                <div key={i}>
+                <div
+                  key={i}
+                  draggable
+                  onDragStart={() => setDragIdx(i)}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverIdx(i); }}
+                  onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+                  onDrop={() => handleDrop(i)}
+                  className={`${dragIdx === i ? "opacity-40" : ""} ${dragOverIdx === i && dragIdx !== i ? "border-t-2 border-t-primary" : ""}`}
+                >
                 <div className="border rounded-lg p-4 space-y-3">
                   <div className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium shrink-0 mt-1">
+                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium shrink-0 mt-1 cursor-grab">
                       {q.order}
                     </div>
                     <div className="flex-1 space-y-2">
@@ -598,6 +648,22 @@ export default function NewStudyPage() {
                             Specificity Improvement
                           </span>
                           <p className="font-medium text-blue-900">&ldquo;{spec.suggestedPrompt}&rdquo;</p>
+                          {spec.suggestedType && spec.suggestedType !== q.type && (
+                            <p className="text-xs font-medium text-blue-800">
+                              Type: {q.type === "SCALE" ? "Number Scale" : q.type} &rarr; {spec.suggestedType === "SCALE" ? "Number Scale" : spec.suggestedType}
+                              {spec.suggestedConfig?.scale && (
+                                <span> ({spec.suggestedConfig.scale.min}-{spec.suggestedConfig.scale.max}{spec.suggestedConfig.scale.minLabel ? `, "${spec.suggestedConfig.scale.minLabel}" to "${spec.suggestedConfig.scale.maxLabel}"` : ""})</span>
+                              )}
+                            </p>
+                          )}
+                          {(!spec.suggestedType || spec.suggestedType === q.type) && spec.suggestedConfig?.scale && (
+                            <p className="text-xs font-medium text-blue-800">
+                              Scale: {q.scaleConfig?.min ?? 1}-{q.scaleConfig?.max ?? 10} &rarr; {spec.suggestedConfig.scale.min}-{spec.suggestedConfig.scale.max}
+                              {spec.suggestedConfig.scale.minLabel && (
+                                <span> (&ldquo;{spec.suggestedConfig.scale.minLabel}&rdquo; to &ldquo;{spec.suggestedConfig.scale.maxLabel}&rdquo;)</span>
+                              )}
+                            </p>
+                          )}
                           <p className="text-xs text-blue-600">{spec.reason}</p>
                         </div>
                       </div>
@@ -625,7 +691,10 @@ export default function NewStudyPage() {
                 })()}
 
                 {/* Inline recommendation card */}
-                {rec && (
+                {rec && (() => {
+                  const originalOrder = questions.findIndex((qq) => qq.prompt === rec.originalPrompt) + 1;
+                  const pairInfo = qualityResult?.reversePairs.find((_, pi) => pi === qualityResult?.recommendations.indexOf(rec));
+                  return (
                   <div
                     id={`rec-${i}`}
                     className="border-2 border-violet-400 bg-violet-50 rounded-lg p-4 space-y-2 ml-6 animate-in fade-in slide-in-from-top-2"
@@ -642,6 +711,14 @@ export default function NewStudyPage() {
                         </div>
                         <p className="font-medium text-violet-900">&ldquo;{rec.reversePrompt}&rdquo;</p>
                         <p className="text-xs text-violet-600">{rec.explanation}</p>
+                        {pairInfo && (
+                          <p className="text-xs text-violet-700">
+                            <span className="font-medium">Construct:</span> {pairInfo.construct} &mdash; {pairInfo.relationship}
+                          </p>
+                        )}
+                        <p className="text-xs text-violet-500 italic">
+                          This question checks consistency with Q{originalOrder} (&ldquo;{rec.originalPrompt}&rdquo;). It&apos;s placed here intentionally &mdash; reverse questions work best when separated from the original.
+                        </p>
                       </div>
                     </div>
                     <div className="flex gap-2 ml-11">
@@ -656,7 +733,7 @@ export default function NewStudyPage() {
                             (r) => r.originalPrompt !== rec.originalPrompt && !acceptedRecs.has(r.originalPrompt)
                           );
                           if (nextRec) {
-                            const nextIdx = questions.findIndex((qq) => qq.prompt === nextRec.originalPrompt);
+                            const nextIdx = questions.findIndex((qq) => qq.order === nextRec.suggestedOrder);
                             if (nextIdx >= 0) {
                               setTimeout(() => {
                                 document.getElementById(`rec-${nextIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -679,7 +756,7 @@ export default function NewStudyPage() {
                             (r) => r.originalPrompt !== rec.originalPrompt && !acceptedRecs.has(r.originalPrompt)
                           );
                           if (nextRec) {
-                            const nextIdx = questions.findIndex((qq) => qq.prompt === nextRec.originalPrompt);
+                            const nextIdx = questions.findIndex((qq) => qq.order === nextRec.suggestedOrder);
                             if (nextIdx >= 0) {
                               setTimeout(() => {
                                 document.getElementById(`rec-${nextIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -692,7 +769,8 @@ export default function NewStudyPage() {
                       </Button>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
                 </div>
                 );
               })}
@@ -760,17 +838,7 @@ export default function NewStudyPage() {
         {/* Quality summary + continue */}
         {qualityResult && createdStudyId && (
           <Card id="quality-summary" className="border-2 border-violet-300 bg-violet-50">
-            <CardContent className="py-4 space-y-3">
-              <p className="text-sm font-medium text-violet-900">{qualityResult.message}</p>
-              {qualityResult.reversePairsDetected > 0 && (
-                <div className="space-y-1">
-                  {qualityResult.reversePairs.map((p, i) => (
-                    <p key={i} className="text-xs text-violet-700">
-                      Detected pair: <span className="font-medium">{p.construct}</span> — {p.relationship}
-                    </p>
-                  ))}
-                </div>
-              )}
+            <CardContent className="py-4">
               <Button onClick={() => router.push(`/dashboard/studies/${createdStudyId}`)} className="w-full">
                 Continue to Study
               </Button>

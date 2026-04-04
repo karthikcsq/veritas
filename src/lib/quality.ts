@@ -76,6 +76,8 @@ export interface SpecificitySuggestion {
   originalPrompt: string;
   suggestedPrompt: string;
   reason: string;
+  suggestedType?: string;
+  suggestedConfig?: { scale?: { min: number; max: number; minLabel?: string; maxLabel?: string } } | null;
 }
 
 export interface SpecificityResult {
@@ -582,6 +584,7 @@ Analyze each question for:
    - A 0-4 "Not at all" to "Nearly every day" scale works for FREQUENCY (e.g., "I have been feeling sad")
    - A 1-5 "Very poor" to "Very good" scale works for EVALUATION
    - If the question asks about frequency but the scale measures intensity (or vice versa), flag it
+   - When the mismatch is clear, suggest BOTH a rewritten question text AND a type/scale change
 
 2. SPECIFICITY: Is the question specific enough?
    - Vague: "How do you feel?" → Better: "Over the past month, how much has pain interfered with your daily activities?"
@@ -596,9 +599,14 @@ ONLY flag questions that genuinely need improvement. If a question is clear and 
 For each flagged question, provide a rewritten version that:
 - Keeps the same construct and intent
 - Matches the style/tone of the original
-- Works naturally with the question's response format (scale range, labels)
 - Uses the correct timeframe from the study description
-- Do NOT change the scale/type — only rewrite the question text
+
+You CAN suggest changing the question type or scale range/labels when the current format does not match the question's intent:
+- If a frequency question ("I have been...", "How often...") is on a 1-10 intensity scale, suggest EITHER:
+  (a) changing to a 0-4 frequency scale with "Not at all" to "Nearly every day" labels, OR
+  (b) rewriting the question to be about intensity (e.g., "Rate your pain level over the past month")
+- If an intensity question is on a frequency scale, suggest fixing accordingly
+- Only suggest type/scale changes when there is a genuine mismatch — do not change scales that already fit
 
 Respond ONLY with valid JSON:
 {
@@ -607,10 +615,16 @@ Respond ONLY with valid JSON:
       "questionIndex": 0,
       "originalPrompt": "the original question",
       "suggestedPrompt": "the improved version",
-      "reason": "One sentence: what was wrong and what you fixed"
+      "reason": "One sentence: what was wrong and what you fixed",
+      "suggestedType": "SCALE or MULTIPLE_CHOICE or null if no type change",
+      "suggestedConfig": null or {"scale": {"min": 0, "max": 4, "minLabel": "Not at all", "maxLabel": "Nearly every day"}}
     }
   ]
 }
+
+Notes on the JSON:
+- "suggestedType" and "suggestedConfig" are optional. Omit them or set to null if only the prompt text needs changing.
+- If you ARE suggesting a type/scale change, always include both "suggestedType" and "suggestedConfig".
 
 If all questions are already good, return an empty suggestions array.`,
       },

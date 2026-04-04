@@ -104,6 +104,12 @@ function highlightMissedParts(prompt: string, missedParts: string[]): React.Reac
   return <>{segments}</>;
 }
 
+/** A page groups a root question with all its direct dependents. */
+interface QuestionPage {
+  root: SurveyQuestion;
+  dependents: SurveyQuestion[];
+}
+
 export default function SurveyPage() {
   const { studyId } = useParams<{ studyId: string }>();
   const searchParams = useSearchParams();
@@ -111,7 +117,7 @@ export default function SurveyPage() {
 
   const [questions, setQuestions] = useState<SurveyQuestion[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeStarted, setTimeStarted] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -143,38 +149,68 @@ export default function SurveyPage() {
     if (studyId) loadQuestions();
   }, [studyId]);
 
-  const visibleQuestions = useMemo(() => {
-    return questions.filter((q) => {
-      if (!q.dependsOn) return true;
-      return evaluateDependency(q.dependsOn, answers);
+  // Group questions into pages: root questions + their dependents
+  const pages: QuestionPage[] = useMemo(() => {
+    const rootQuestions = questions.filter((q) => !q.dependsOn);
+    return rootQuestions.map((root) => {
+      const dependents = questions.filter(
+        (q) => q.dependsOn && q.dependsOn.questionId === `order_${root.order}`
+      );
+      return { root, dependents };
     });
-  }, [questions, answers]);
+  }, [questions]);
 
-  const question = visibleQuestions[currentIndex];
-  const isLast = currentIndex === visibleQuestions.length - 1;
-  const progress = visibleQuestions.length > 0 ? ((currentIndex + 1) / visibleQuestions.length) * 100 : 0;
-  const currentValidity = question ? validity[question.id] : undefined;
+  // Visible questions on the current page (root + visible dependents)
+  const currentPage = pages[currentPageIndex];
+  const visiblePageQuestions: SurveyQuestion[] = useMemo(() => {
+    if (!currentPage) return [];
+    const result: SurveyQuestion[] = [currentPage.root];
+    for (const dep of currentPage.dependents) {
+      if (dep.dependsOn && evaluateDependency(dep.dependsOn, answers)) {
+        result.push(dep);
+      }
+    }
+    return result;
+  }, [currentPage, answers]);
 
-  function setAnswer(value: string) {
-    if (!question) return;
-    setAnswers({ ...answers, [question.id]: value });
-    if (validity[question.id]) {
+  const isLastPage = currentPageIndex === pages.length - 1;
+  const progress = pages.length > 0 ? ((currentPageIndex + 1) / pages.length) * 100 : 0;
+
+  function setAnswer(questionId: string, value: string) {
+    setAnswers((prev) => ({ ...prev, [questionId]: value }));
+    if (validity[questionId]) {
       setValidity((prev) => {
         const next = { ...prev };
-        delete next[question.id];
+        delete next[questionId];
         return next;
       });
     }
   }
 
   function advanceToNext() {
-    if (isLast) {
+    if (isLastPage) {
       submitResponses();
     } else {
-      const nextQ = visibleQuestions[currentIndex + 1];
-      setTimeStarted((prev) => ({ ...prev, [nextQ.id]: Date.now() }));
-      setCurrentIndex((i) => i + 1);
+      const nextPage = pages[currentPageIndex + 1];
+      if (nextPage) {
+        setTimeStarted((prev) => ({ ...prev, [nextPage.root.id]: Date.now() }));
+      }
+      setCurrentPageIndex((i) => i + 1);
     }
+  }
+
+  // Collect all visible questions across all pages for submission
+  function getAllVisibleQuestions(): SurveyQuestion[] {
+    const result: SurveyQuestion[] = [];
+    for (const page of pages) {
+      result.push(page.root);
+      for (const dep of page.dependents) {
+        if (dep.dependsOn && evaluateDependency(dep.dependsOn, answers)) {
+          result.push(dep);
+        }
+      }
+    }
+    return result;
   }
 
   async function submitResponses() {
@@ -186,7 +222,8 @@ export default function SurveyPage() {
     setSubmitting(true);
     try {
       const now = Date.now();
-      const responsePayload = visibleQuestions.map((q) => ({
+      const allVisible = getAllVisibleQuestions();
+      const responsePayload = allVisible.map((q) => ({
         questionId: q.id,
         value: answers[q.id] ?? "",
         timeSpentMs: now - (timeStarted[q.id] ?? now),
@@ -207,20 +244,26 @@ export default function SurveyPage() {
   }
 
   const validateAndProceed = useCallback(async () => {
-    if (!question) return;
-    const answer = answers[question.id];
-    if (!answer) return;
+    if (!currentPage) return;
 
-    const needsLlmCheck =
-      question.type === "LONG_TEXT" || question.type === "SHORT_TEXT";
-
-    if (!needsLlmCheck) {
-      advanceToNext();
-      return;
+    // Check that all required visible questions on this page have answers
+    for (const q of visiblePageQuestions) {
+      if (q.required && !answers[q.id]) return;
     }
 
-    const existing = validity[question.id];
-    if (existing?.dismissed) {
+    // Find the first text question on this page that needs LLM validation
+    const textQs = visiblePageQuestions.filter(
+      (q) => (q.type === "LONG_TEXT" || q.type === "SHORT_TEXT") && answers[q.id]
+    );
+
+    // Check if any text question needs validation
+    const needsValidation = textQs.find((q) => {
+      const existing = validity[q.id];
+      return !existing?.dismissed && !existing;
+    });
+
+    if (!needsValidation) {
+      // All validated or non-text, proceed
       advanceToNext();
       return;
     }
@@ -231,9 +274,9 @@ export default function SurveyPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          question: question.prompt,
-          answer,
-          questionType: question.type,
+          question: needsValidation.prompt,
+          answer: answers[needsValidation.id],
+          questionType: needsValidation.type,
         }),
       });
       const data: ValidateResponseResponse = await res.json();
@@ -241,7 +284,7 @@ export default function SurveyPage() {
       if (data.score < 40) {
         setValidity((prev) => ({
           ...prev,
-          [question.id]: {
+          [needsValidation.id]: {
             score: data.score,
             explanation: data.explanation,
             missedParts: data.missedParts ?? [],
@@ -249,20 +292,38 @@ export default function SurveyPage() {
           },
         }));
       } else {
-        advanceToNext();
+        // Mark as passed so we don't re-validate
+        setValidity((prev) => ({
+          ...prev,
+          [needsValidation.id]: {
+            score: data.score,
+            explanation: "",
+            missedParts: [],
+            dismissed: true,
+          },
+        }));
+        // Check if there are more text questions to validate
+        const remaining = textQs.filter((q) => {
+          if (q.id === needsValidation.id) return false;
+          const existing = validity[q.id];
+          return !existing?.dismissed && !existing;
+        });
+        if (remaining.length === 0) {
+          advanceToNext();
+        }
+        // If remaining, the user clicks Next again to validate the next one
       }
     } catch {
       advanceToNext();
     } finally {
       setValidating(false);
     }
-  }, [answers, question, isLast, validity, visibleQuestions, currentIndex, timeStarted, enrollmentId]);
+  }, [answers, currentPage, visiblePageQuestions, isLastPage, validity, pages, currentPageIndex, timeStarted, enrollmentId]);
 
-  function dismissWarning() {
-    if (!question) return;
+  function dismissWarning(questionId: string) {
     setValidity((prev) => ({
       ...prev,
-      [question.id]: { ...prev[question.id], dismissed: true },
+      [questionId]: { ...prev[questionId], dismissed: true },
     }));
   }
 
@@ -302,12 +363,17 @@ export default function SurveyPage() {
     );
   }
 
+  // Check if all required visible questions on this page have answers
+  const allPageAnswered = visiblePageQuestions.every(
+    (q) => !q.required || !!answers[q.id]
+  );
+
   return (
     <div className="flex-1 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-lg space-y-4">
         <div className="space-y-1">
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Question {currentIndex + 1} of {visibleQuestions.length}</span>
+            <span>Question {currentPageIndex + 1} of {pages.length}</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -318,165 +384,173 @@ export default function SurveyPage() {
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">
-              {currentValidity && !currentValidity.dismissed && currentValidity.missedParts.length > 0
-                ? highlightMissedParts(question.prompt, currentValidity.missedParts)
-                : question.prompt}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {question.type === "SCALE" && (() => {
-              const sc = question.config?.scale ?? { min: 1, max: 10 };
-              const step = sc.step ?? 1;
-              const values: number[] = [];
-              for (let n = sc.min; n <= sc.max; n += step) values.push(n);
-              return (
-                <div className="space-y-2">
-                  <div className="flex gap-2 flex-wrap">
-                    {values.map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => setAnswer(String(n))}
-                        className={`h-10 w-10 rounded-lg border text-sm font-medium transition-colors ${
-                          answers[question.id] === String(n)
-                            ? "bg-primary text-primary-foreground"
-                            : "hover:bg-muted"
-                        }`}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                  {(sc.minLabel || sc.maxLabel) && (
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{sc.minLabel ?? ""}</span>
-                      <span>{sc.maxLabel ?? ""}</span>
+        {visiblePageQuestions.map((question) => {
+          const currentValidity = validity[question.id];
+          const isDependent = !!question.dependsOn;
+
+          return (
+            <Card key={question.id} className={isDependent ? "ml-4 border-l-4 border-l-primary/30" : ""}>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {currentValidity && !currentValidity.dismissed && currentValidity.missedParts.length > 0
+                    ? highlightMissedParts(question.prompt, currentValidity.missedParts)
+                    : question.prompt}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {question.type === "SCALE" && (() => {
+                  const sc = question.config?.scale ?? { min: 1, max: 10 };
+                  const step = sc.step ?? 1;
+                  const values: number[] = [];
+                  for (let n = sc.min; n <= sc.max; n += step) values.push(n);
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex gap-2 flex-wrap">
+                        {values.map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setAnswer(question.id, String(n))}
+                            className={`h-10 w-10 rounded-lg border text-sm font-medium transition-colors ${
+                              answers[question.id] === String(n)
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-muted"
+                            }`}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                      {(sc.minLabel || sc.maxLabel) && (
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>{sc.minLabel ?? ""}</span>
+                          <span>{sc.maxLabel ?? ""}</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })()}
+                  );
+                })()}
 
-            {question.type === "LONG_TEXT" && (
-              <textarea
-                className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder="Type your answer..."
-                value={answers[question.id] || ""}
-                onChange={(e) => setAnswer(e.target.value)}
-              />
-            )}
+                {question.type === "LONG_TEXT" && (
+                  <textarea
+                    className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Type your answer..."
+                    value={answers[question.id] || ""}
+                    onChange={(e) => setAnswer(question.id, e.target.value)}
+                  />
+                )}
 
-            {question.type === "SHORT_TEXT" && (
-              <input
-                type="text"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder="Type your answer..."
-                value={answers[question.id] || ""}
-                onChange={(e) => setAnswer(e.target.value)}
-              />
-            )}
+                {question.type === "SHORT_TEXT" && (
+                  <input
+                    type="text"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Type your answer..."
+                    value={answers[question.id] || ""}
+                    onChange={(e) => setAnswer(question.id, e.target.value)}
+                  />
+                )}
 
-            {question.type === "MULTIPLE_CHOICE" && question.options && (
-              <div className="space-y-2">
-                {question.options.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setAnswer(option)}
-                    className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors ${
-                      answers[question.id] === option
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-muted"
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {question.type === "CHECKBOX" && question.options && (() => {
-              const selected: string[] = (() => {
-                try { return JSON.parse(answers[question.id] || "[]"); }
-                catch { return []; }
-              })();
-              return (
-                <div className="space-y-2">
-                  {question.options.map((option) => {
-                    const isChecked = selected.includes(option);
-                    return (
+                {question.type === "MULTIPLE_CHOICE" && question.options && (
+                  <div className="space-y-2">
+                    {question.options.map((option) => (
                       <button
                         key={option}
                         type="button"
-                        onClick={() => {
-                          const next = isChecked
-                            ? selected.filter((s) => s !== option)
-                            : [...selected, option];
-                          setAnswer(JSON.stringify(next));
-                        }}
-                        className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors flex items-center gap-3 ${
-                          isChecked
+                        onClick={() => setAnswer(question.id, option)}
+                        className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors ${
+                          answers[question.id] === option
                             ? "bg-primary text-primary-foreground"
                             : "hover:bg-muted"
                         }`}
                       >
-                        <span className={`h-4 w-4 rounded border flex items-center justify-center text-xs ${
-                          isChecked ? "bg-primary-foreground text-primary" : "border-current"
-                        }`}>
-                          {isChecked ? "\u2713" : ""}
-                        </span>
                         {option}
                       </button>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+                    ))}
+                  </div>
+                )}
 
-            {currentValidity && !currentValidity.dismissed && (
-              <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-                <p className="font-medium">
-                  {currentValidity.score < 20
-                    ? "Hmm, this doesn\u2019t seem related to the question \u2014 mind taking another look?"
-                    : "Just a heads up \u2014 your answer might not fully cover what\u2019s being asked."}
-                </p>
-                <p className="mt-1 text-xs opacity-80">
-                  {currentValidity.explanation}
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <Button size="sm" variant="outline" onClick={dismissWarning}>
-                    Keep my answer
-                  </Button>
-                </div>
-              </div>
-            )}
+                {question.type === "CHECKBOX" && question.options && (() => {
+                  const selected: string[] = (() => {
+                    try { return JSON.parse(answers[question.id] || "[]"); }
+                    catch { return []; }
+                  })();
+                  return (
+                    <div className="space-y-2">
+                      {question.options.map((option) => {
+                        const isChecked = selected.includes(option);
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => {
+                              const next = isChecked
+                                ? selected.filter((s) => s !== option)
+                                : [...selected, option];
+                              setAnswer(question.id, JSON.stringify(next));
+                            }}
+                            className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors flex items-center gap-3 ${
+                              isChecked
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-muted"
+                            }`}
+                          >
+                            <span className={`h-4 w-4 rounded border flex items-center justify-center text-xs ${
+                              isChecked ? "bg-primary-foreground text-primary" : "border-current"
+                            }`}>
+                              {isChecked ? "\u2713" : ""}
+                            </span>
+                            {option}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
-            <div className="flex justify-between pt-4">
-              <Button
-                variant="ghost"
-                onClick={() => setCurrentIndex(Math.max(0, currentIndex - 1))}
-                disabled={currentIndex === 0}
-              >
-                Previous
-              </Button>
-              <Button
-                onClick={validateAndProceed}
-                disabled={!answers[question.id] || validating || submitting}
-              >
-                {validating
-                  ? "Checking..."
-                  : submitting
-                    ? "Submitting..."
-                    : isLast
-                      ? "Submit"
-                      : "Next"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+                {currentValidity && !currentValidity.dismissed && (
+                  <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+                    <p className="font-medium">
+                      {currentValidity.score < 20
+                        ? "Hmm, this doesn\u2019t seem related to the question \u2014 mind taking another look?"
+                        : "Just a heads up \u2014 your answer might not fully cover what\u2019s being asked."}
+                    </p>
+                    <p className="mt-1 text-xs opacity-80">
+                      {currentValidity.explanation}
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => dismissWarning(question.id)}>
+                        Keep my answer
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+
+        {/* Navigation buttons — outside the question cards */}
+        <div className="flex justify-between pt-2">
+          <Button
+            variant="ghost"
+            onClick={() => setCurrentPageIndex(Math.max(0, currentPageIndex - 1))}
+            disabled={currentPageIndex === 0}
+          >
+            Previous
+          </Button>
+          <Button
+            onClick={validateAndProceed}
+            disabled={!allPageAnswered || validating || submitting}
+          >
+            {validating
+              ? "Checking..."
+              : submitting
+                ? "Submitting..."
+                : isLastPage
+                  ? "Submit"
+                  : "Next"}
+          </Button>
+        </div>
       </div>
     </div>
   );
