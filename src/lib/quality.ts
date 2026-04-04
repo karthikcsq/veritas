@@ -595,12 +595,24 @@ For each SCALE question, check: does the question wording match what the scale m
 - EVALUATION questions ("How would you rate...", "How satisfied...") need an EVALUATION scale:
   → 1-5 with labels like "Very poor" to "Very good"
 
+CRITICAL: The "suggestedPrompt" text MUST make grammatical and logical sense with the scale you suggest. The question wording and scale type must match.
+
 EXAMPLES of Step 1:
-- BAD: "I have been experiencing pain" on Scale 1-10 with no labels → MISMATCH. Suggest EITHER: change to 0-4 frequency scale with "Not at all"/"Nearly every day" labels, OR rewrite to "Over the past month, rate your average pain level" with "No pain"/"Worst pain imaginable" labels.
-- BAD: "Rate your pain level" on Scale 1-10 with no labels → Scale range is OK, but MISSING LABELS. Suggest labels "No pain" / "Worst pain imaginable".
+- BAD: "I have been experiencing pain" on Scale 1-10 → This is a frequency statement on an intensity scale.
+  → OPTION A (change scale to match text): suggestedPrompt="Over the past month, I have been experiencing pain", suggestedConfig={"scale":{"min":0,"max":4,"minLabel":"Not at all","maxLabel":"Nearly every day"}}
+  → OPTION B (change text to match scale): suggestedPrompt="Over the past month, rate your average pain level", suggestedConfig={"scale":{"min":0,"max":10,"minLabel":"No pain","maxLabel":"Worst pain imaginable"}}
+  Pick whichever option produces the best clinical question. Do NOT mix them (e.g., do NOT output "I have been experiencing pain" with a 0-10 intensity scale — that doesn't make sense).
+
+- BAD: "Pain has interfered with my work" on Scale 1-10 → Frequency/impact statement on intensity scale.
+  → suggestedPrompt="Over the past month, how much has pain interfered with your work?", suggestedConfig={"scale":{"min":0,"max":10,"minLabel":"Does not interfere","maxLabel":"Completely interferes"}}
+  This works because "how much" is an intensity question that matches a 0-10 scale.
+
+- BAD: "Rate your pain level" on Scale 1-10 with no labels → Scale range is OK for intensity, but MISSING LABELS.
+  → suggestedPrompt="Over the past month, rate your average pain level", suggestedConfig={"scale":{"min":0,"max":10,"minLabel":"No pain","maxLabel":"Worst pain imaginable"}}
+
 - OK: "Rate your pain level" on Scale 0-10 with "No pain"/"Worst pain" → No change needed.
 
-When Step 1 finds a mismatch, you MUST include "suggestedType" and "suggestedConfig" in your response. Do NOT just rewrite the text — actually change the type/scale/labels.
+When Step 1 finds a mismatch, you MUST include "suggestedType" and "suggestedConfig" in your response AND the "suggestedPrompt" must be rewritten to match the new scale.
 
 **STEP 2 — Scale Labels (REQUIRED for all SCALE questions):**
 If a SCALE question has NO minLabel or maxLabel, you MUST suggest appropriate labels in "suggestedConfig", even if the question text and scale range are perfectly fine. Labels are REQUIRED for participant clarity.
