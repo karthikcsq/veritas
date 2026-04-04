@@ -4,12 +4,13 @@ import Link from "next/link";
 import {
   AlertTriangle,
   CheckCircle,
+  Download,
+  Share2,
   Shield,
   Star,
   TrendingUp,
   Users,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverviewTab } from "@/components/analytics/overview-tab";
@@ -21,144 +22,171 @@ import { QuestionsTab } from "@/components/analytics/questions-tab";
 
 const STATS = [
   {
-    label: "Total Enrolled",
+    label: "Enrolled",
     value: "12",
     sub: "+2 today",
     icon: Users,
-    gradient: "from-blue-500 to-cyan-500",
+    color: "text-sky-300",
+    bg: "bg-sky-500/20",
   },
   {
     label: "Completed",
     value: "8",
-    sub: "66.7% completion",
+    sub: "66.7%",
     icon: CheckCircle,
-    gradient: "from-emerald-500 to-green-500",
+    color: "text-emerald-300",
+    bg: "bg-emerald-500/20",
   },
   {
     label: "Flagged",
     value: "3",
-    sub: "25% flag rate",
+    sub: "25%",
     icon: AlertTriangle,
-    gradient: "from-rose-500 to-red-500",
+    color: "text-rose-300",
+    bg: "bg-rose-500/20",
   },
   {
     label: "AI Detected",
     value: "3",
-    sub: "All 3 overlapping flagged",
+    sub: "of flagged",
     icon: Shield,
-    gradient: "from-orange-500 to-amber-500",
+    color: "text-orange-300",
+    bg: "bg-orange-500/20",
   },
   {
     label: "Avg Quality",
     value: "0.76",
-    sub: "+0.04 vs last week",
+    sub: "+0.04 this week",
     icon: Star,
-    gradient: "from-violet-500 to-purple-500",
+    color: "text-violet-300",
+    bg: "bg-violet-500/20",
   },
+];
+
+const TABS = [
+  { value: "overview", label: "Overview" },
+  { value: "integrity", label: "Integrity" },
+  { value: "linguistic", label: "Linguistic" },
+  { value: "geographic", label: "Geographic" },
+  { value: "behavior", label: "Behavior" },
+  { value: "questions", label: "Questions" },
 ];
 
 export default function StudyDetailPage() {
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Sticky header */}
-      <header className="sticky top-0 z-50 border-b bg-white shadow-sm">
-        <div className="flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard">
-              <Button variant="ghost" size="sm">
-                ← Back
-              </Button>
-            </Link>
-            <div className="h-5 w-px bg-border" />
-            <div>
-              <h1 className="text-lg font-bold leading-tight">
-                Pain Management in Adults Over 50
-              </h1>
-              <div className="mt-0.5 flex items-center gap-2">
-                <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-200 hover:bg-emerald-500/20">
-                  ACTIVE
-                </Badge>
-                <span className="text-sm text-muted-foreground">
-                  12 / 200 enrolled
-                </span>
-                <span className="text-muted-foreground">·</span>
-                <span className="flex items-center gap-1 text-sm text-emerald-600">
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  Trending up
-                </span>
+      <Tabs defaultValue="overview" className="flex-col">
+        {/* ── Sticky top nav block ─────────────────────────────────── */}
+        <div className="sticky top-0 z-50">
+          {/* Gradient header */}
+          <div className="bg-gradient-to-r from-slate-900 via-violet-950 to-slate-900">
+            <div className="mx-auto max-w-7xl px-6">
+              {/* Row 1: back + title + actions */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-center gap-4">
+                  <Link href="/dashboard">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-white/60 hover:text-white hover:bg-white/10"
+                    >
+                      ← Back
+                    </Button>
+                  </Link>
+                  <div className="h-5 w-px bg-white/15" />
+                  <div>
+                    <h1 className="text-xl font-bold text-white">
+                      Pain Management in Adults Over 50
+                    </h1>
+                    <div className="mt-0.5 flex items-center gap-2.5 text-sm">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        ACTIVE
+                      </span>
+                      <span className="text-white/50">12 / 200 enrolled</span>
+                      <span className="text-white/30">·</span>
+                      <span className="flex items-center gap-1 text-emerald-400">
+                        <TrendingUp className="h-3.5 w-3.5" />
+                        Trending up
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 border border-white/15 text-white/70 hover:text-white hover:bg-white/10"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Export
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gap-1.5 bg-violet-500 text-white hover:bg-violet-400"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    Share
+                  </Button>
+                </div>
+              </div>
+
+              {/* Row 2: inline stat pills */}
+              <div className="flex items-center gap-1 pb-4">
+                {STATS.map((s, i) => {
+                  const Icon = s.icon;
+                  return (
+                    <div key={s.label} className="flex items-center gap-1">
+                      {i > 0 && (
+                        <div className="mx-3 h-6 w-px bg-white/10" />
+                      )}
+                      <div
+                        className={`flex items-center gap-2 rounded-lg px-3 py-1.5 ${s.bg}`}
+                      >
+                        <Icon className={`h-4 w-4 ${s.color}`} />
+                        <span className="text-xl font-bold text-white tabular-nums">
+                          {s.value}
+                        </span>
+                        <div>
+                          <div className="text-xs font-medium text-white/80 leading-none">
+                            {s.label}
+                          </div>
+                          <div className="text-[10px] text-white/40 leading-none mt-0.5">
+                            {s.sub}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              Export Report
-            </Button>
-            <Button variant="outline" size="sm">
-              Close Study
-            </Button>
-            <Button
-              size="sm"
-              className="bg-violet-600 hover:bg-violet-700 text-white"
-            >
-              Share Link
-            </Button>
+
+          {/* Tab bar */}
+          <div className="border-b bg-white shadow-sm">
+            <div className="mx-auto max-w-7xl px-6">
+              <TabsList
+                variant="line"
+                className="h-auto w-full justify-start rounded-none bg-transparent p-0 gap-0"
+              >
+                {TABS.map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="h-auto rounded-none border-b-2 border-transparent px-5 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-active:border-violet-600 data-active:text-violet-700"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
           </div>
         </div>
-      </header>
 
-      <div className="mx-auto max-w-7xl px-6 py-8">
-        {/* Stat cards */}
-        <div className="mb-8 grid grid-cols-5 gap-4">
-          {STATS.map((s) => {
-            const Icon = s.icon;
-            return (
-              <div
-                key={s.label}
-                className="group relative overflow-hidden rounded-xl border bg-white p-5 transition-shadow hover:shadow-md"
-              >
-                <div
-                  className={`absolute inset-0 bg-gradient-to-br ${s.gradient} opacity-0 transition-opacity group-hover:opacity-5`}
-                />
-                <div
-                  className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${s.gradient}`}
-                >
-                  <Icon className="h-4 w-4 text-white" />
-                </div>
-                <div className="text-2xl font-bold tabular-nums">{s.value}</div>
-                <div className="text-sm font-medium text-muted-foreground">
-                  {s.label}
-                </div>
-                <div className="mt-0.5 text-xs text-muted-foreground/70">
-                  {s.sub}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Tabs */}
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="h-auto gap-1 border bg-white p-1">
-            <TabsTrigger value="overview" className="rounded-md px-4 py-2 text-sm">
-              Overview
-            </TabsTrigger>
-            <TabsTrigger value="integrity" className="rounded-md px-4 py-2 text-sm">
-              Integrity
-            </TabsTrigger>
-            <TabsTrigger value="linguistic" className="rounded-md px-4 py-2 text-sm">
-              Linguistic
-            </TabsTrigger>
-            <TabsTrigger value="geographic" className="rounded-md px-4 py-2 text-sm">
-              Geographic
-            </TabsTrigger>
-            <TabsTrigger value="behavior" className="rounded-md px-4 py-2 text-sm">
-              Behavior
-            </TabsTrigger>
-            <TabsTrigger value="questions" className="rounded-md px-4 py-2 text-sm">
-              Questions
-            </TabsTrigger>
-          </TabsList>
-
+        {/* ── Scrollable content ────────────────────────────────────── */}
+        <div className="mx-auto max-w-7xl px-6 py-10">
           <TabsContent value="overview">
             <OverviewTab />
           </TabsContent>
@@ -177,8 +205,8 @@ export default function StudyDetailPage() {
           <TabsContent value="questions">
             <QuestionsTab />
           </TabsContent>
-        </Tabs>
-      </div>
+        </div>
+      </Tabs>
     </div>
   );
 }

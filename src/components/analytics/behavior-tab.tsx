@@ -143,7 +143,7 @@ export function BehaviorTab() {
   const botCount = ENTROPY_DATA.filter((p) => p.pattern === "Bot").length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Info banner */}
       <Card className="border-0 bg-gradient-to-r from-slate-800 to-slate-900 text-white">
         <CardContent className="py-5">
@@ -180,9 +180,9 @@ export function BehaviorTab() {
       </Card>
 
       {/* Side-by-side heatmaps */}
-      <div className="grid grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
+      <div className="grid grid-cols-2 gap-8">
+        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+          <CardHeader className="px-6 pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Human Movement Pattern</CardTitle>
@@ -195,7 +195,7 @@ export function BehaviorTab() {
               </Badge>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6">
             <Heatmap grid={HUMAN_GRID} colorFn={humanCellColor} />
             <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
               <div className="rounded-lg bg-slate-50 p-2">
@@ -214,8 +214,8 @@ export function BehaviorTab() {
           </CardContent>
         </Card>
 
-        <Card className="border-rose-200">
-          <CardHeader>
+        <Card className="border-0 shadow-sm ring-2 ring-rose-200">
+          <CardHeader className="px-6 pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-rose-700">
@@ -228,7 +228,7 @@ export function BehaviorTab() {
               <Badge variant="destructive">Entropy: 0.11</Badge>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6">
             <Heatmap grid={BOT_GRID} colorFn={botCellColor} />
             <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
               <div className="rounded-lg bg-rose-50 p-2">
@@ -249,21 +249,21 @@ export function BehaviorTab() {
       </div>
 
       {/* Per-participant entropy */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Per-Participant Movement Entropy</CardTitle>
+      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <CardHeader className="px-6 pt-6">
+          <CardTitle className="text-lg">Per-Participant Movement Entropy</CardTitle>
           <CardDescription>
             Scores below{" "}
             <span className="font-semibold text-rose-600">0.40</span> indicate
             automated or bot-assisted behavior
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-6 pb-6">
           <div className="space-y-0">
             {ENTROPY_DATA.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center gap-4 border-b py-2.5 last:border-0"
+                className="flex items-center gap-4 border-b py-3.5 last:border-0"
               >
                 <div className="w-16 font-mono text-xs text-muted-foreground">
                   {p.id}
@@ -301,8 +301,8 @@ export function BehaviorTab() {
       </Card>
 
       {/* Heatmap legend */}
-      <Card className="bg-slate-50">
-        <CardContent className="py-4">
+      <Card className="border-0 bg-slate-50 ring-1 ring-slate-200">
+        <CardContent className="py-5 px-6">
           <div className="flex flex-wrap items-center gap-6 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
               <div

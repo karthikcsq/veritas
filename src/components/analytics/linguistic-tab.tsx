@@ -96,11 +96,11 @@ function simColor(v: number): string {
 
 export function LinguisticTab() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Similarity matrix */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Answer Similarity Matrix</CardTitle>
+      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <CardHeader className="px-6 pt-6">
+          <CardTitle className="text-lg">Answer Similarity Matrix</CardTitle>
           <CardDescription>
             Pairwise semantic similarity between responses across questions
             (embedding cosine similarity). Scores below{" "}
@@ -108,7 +108,7 @@ export function LinguisticTab() {
             non-identical questions may indicate contradictions or topic drift.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-6 pb-6">
           <div className="overflow-x-auto">
             <div className="inline-block min-w-full">
               {/* Column headers */}
@@ -162,17 +162,17 @@ export function LinguisticTab() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-8">
         {/* Time spent per question */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Avg Time per Question</CardTitle>
+        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+          <CardHeader className="px-6 pt-6">
+            <CardTitle className="text-lg">Avg Time per Question</CardTitle>
             <CardDescription>
               Seconds — bot responses typically fall under 15s for all questions
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
+          <CardContent className="px-6 pb-6">
+            <ResponsiveContainer width="100%" height={240}>
               <BarChart data={TIME_DATA} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11 }} unit="s" />
@@ -214,15 +214,15 @@ export function LinguisticTab() {
         </Card>
 
         {/* Response length vs quality */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Response Length vs. Quality</CardTitle>
+        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+          <CardHeader className="px-6 pt-6">
+            <CardTitle className="text-lg">Response Length vs. Quality</CardTitle>
             <CardDescription>
               Avg word count per enrollment vs. overall quality score
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
+          <CardContent className="px-6 pb-6">
+            <ResponsiveContainer width="100%" height={240}>
               <ScatterChart
                 margin={{ top: 10, right: 20, bottom: 20, left: 0 }}
               >
@@ -272,20 +272,20 @@ export function LinguisticTab() {
       </div>
 
       {/* Consistency scores */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Semantic Consistency Scores</CardTitle>
+      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <CardHeader className="px-6 pt-6">
+          <CardTitle className="text-lg">Semantic Consistency Scores</CardTitle>
           <CardDescription>
             Cross-response contradiction detection — lower scores indicate
             self-contradiction across answers within the same enrollment
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-6 pb-6">
           <div className="space-y-0">
             {CONSISTENCY_DATA.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center gap-4 border-b py-2.5 last:border-0"
+                className="flex items-center gap-4 border-b py-3.5 last:border-0"
               >
                 <div className="w-16 font-mono text-xs text-muted-foreground">
                   {p.id}

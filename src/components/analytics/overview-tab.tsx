@@ -92,15 +92,15 @@ function CircleGauge({
 
 export function OverviewTab() {
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-6">
+    <div className="space-y-8">
+      <div className="grid grid-cols-3 gap-8">
         {/* Donut chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quality Distribution</CardTitle>
+        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+          <CardHeader className="pb-2 pt-6 px-6">
+            <CardTitle className="text-lg">Quality Distribution</CardTitle>
             <CardDescription>Across all scored responses</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6">
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie
@@ -140,12 +140,12 @@ export function OverviewTab() {
         </Card>
 
         {/* Enrollment trend */}
-        <Card className="col-span-2">
-          <CardHeader>
-            <CardTitle>Enrollment & Completion Trend</CardTitle>
+        <Card className="col-span-2 border-0 shadow-sm ring-1 ring-slate-200">
+          <CardHeader className="pb-2 pt-6 px-6">
+            <CardTitle className="text-lg">Enrollment & Completion Trend</CardTitle>
             <CardDescription>Cumulative over study period</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6">
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={ENROLLMENT_TREND}>
                 <defs>
@@ -198,15 +198,15 @@ export function OverviewTab() {
       </div>
 
       {/* Dimension score gauges */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Average Quality Dimensions</CardTitle>
+      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <CardHeader className="pb-2 pt-6 px-6">
+          <CardTitle className="text-lg">Average Quality Dimensions</CardTitle>
           <CardDescription>
             Mean scores (0–100) across all evaluated responses
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-around py-4">
+        <CardContent className="px-6 pb-6">
+          <div className="flex items-center justify-around py-8">
             {DIMENSION_SCORES.map((d) => (
               <CircleGauge
                 key={d.label}
@@ -216,11 +216,11 @@ export function OverviewTab() {
               />
             ))}
           </div>
-          <div className="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-muted-foreground">
-            <strong className="text-foreground">Interpretation:</strong>{" "}
+          <div className="mt-2 rounded-xl border border-violet-100 bg-violet-50/60 px-5 py-4 text-sm text-muted-foreground">
+            <strong className="text-violet-700">Interpretation:</strong>{" "}
             Consistency leads at 81 — participants are largely coherent within
             their own responses. Effort (68) is the lowest dimension, suggesting
-            some participants provided minimal engagement.
+            some participants provided minimal engagement with open-ended prompts.
           </div>
         </CardContent>
       </Card>

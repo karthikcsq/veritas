@@ -135,18 +135,18 @@ export function GeographicTab() {
     .sort((a, b) => (b.avgQuality ?? 0) - (a.avgQuality ?? 0));
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-6">
+    <div className="space-y-8">
+      <div className="grid grid-cols-3 gap-8">
         {/* Horizontal bar chart */}
-        <Card className="col-span-2">
-          <CardHeader>
-            <CardTitle>Responses by Country</CardTitle>
+        <Card className="col-span-2 border-0 shadow-sm ring-1 ring-slate-200">
+          <CardHeader className="px-6 pt-6">
+            <CardTitle className="text-lg">Responses by Country</CardTitle>
             <CardDescription>
               Participant origin distribution — detected via World ID credential
               region
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6">
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={sorted} layout="vertical" margin={{ left: 16 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
@@ -179,12 +179,12 @@ export function GeographicTab() {
         </Card>
 
         {/* Quality by country */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Avg Quality by Country</CardTitle>
+        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+          <CardHeader className="px-6 pt-6">
+            <CardTitle className="text-lg">Avg Quality by Country</CardTitle>
             <CardDescription>Ranked high → low</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 pt-1">
+          <CardContent className="space-y-4 px-6 pb-6">
             {byQuality.map((c) => (
               <div key={c.code} className="space-y-1">
                 <div className="flex items-center justify-between text-sm">
@@ -209,13 +209,13 @@ export function GeographicTab() {
       </div>
 
       {/* Country cards grid */}
-      <div className="grid grid-cols-4 gap-4 xl:grid-cols-5">
+      <div className="grid grid-cols-4 gap-5 xl:grid-cols-5">
         {sorted.map((c) => (
           <Card
             key={c.code}
-            className="transition-shadow hover:shadow-md"
+            className="border-0 shadow-sm ring-1 ring-slate-200 transition-shadow hover:shadow-md hover:ring-violet-200"
           >
-            <CardContent className="pb-5 pt-5">
+            <CardContent className="pb-6 pt-6">
               <div className="mb-2 text-4xl">{c.flag}</div>
               <div className="text-sm font-semibold">{c.country}</div>
               <div className="mt-1 text-2xl font-bold">{c.count}</div>
@@ -243,7 +243,7 @@ export function GeographicTab() {
       </div>
 
       {/* Insight callout */}
-      <Card className="border-amber-200 bg-amber-50/40">
+      <Card className="border-0 ring-2 ring-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50">
         <CardContent className="py-4">
           <div className="flex items-start gap-3 text-sm">
             <span className="text-xl">💡</span>
