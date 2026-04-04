@@ -888,12 +888,20 @@ export default function NewStudyPage() {
           )}
         </form>
 
-        {/* Quality summary + continue */}
+        {/* Confirm & finalize */}
         {qualityResult && createdStudyId && (
-          <Card id="quality-summary" className="border-2 border-violet-300 bg-violet-50">
-            <CardContent className="py-4">
-              <Button onClick={() => router.push(`/dashboard/studies/${createdStudyId}`)} className="w-full">
-                Continue to Study
+          <Card id="quality-summary" className="border-2 border-emerald-300 bg-emerald-50">
+            <CardContent className="py-6 space-y-3">
+              <div className="text-center space-y-1">
+                <p className="font-medium text-emerald-900">Ready to finalize your survey</p>
+                <p className="text-sm text-emerald-700">Once confirmed, the survey questions cannot be edited. Review your questions above before proceeding.</p>
+              </div>
+              <Button
+                onClick={() => router.push(`/dashboard/studies/${createdStudyId}`)}
+                size="lg"
+                className="w-full bg-emerald-600 hover:bg-emerald-500"
+              >
+                Confirm &amp; Finalize Survey
               </Button>
             </CardContent>
           </Card>
