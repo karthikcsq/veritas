@@ -86,7 +86,7 @@ export async function scoreResponse(
   }
 
   const completion = await getOpenAI().chat.completions.create({
-    model: "gpt-5.4-nano",
+    model: "gpt-5.4-mini",
     messages: [{ role: "user", content: buildScoringPrompt(input) }],
     response_format: { type: "json_object" },
     temperature: 0.1,
