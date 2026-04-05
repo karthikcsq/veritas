@@ -39,10 +39,10 @@ export async function POST(
       responseIds.push(id);
     }
 
-    // Update enrollment status
+    // Mark as completed immediately — scoring pipeline may downgrade to FLAGGED
     await client.query(
-      'UPDATE "Enrollment" SET "status" = $1 WHERE "id" = $2',
-      ["IN_PROGRESS", enrollmentId]
+      'UPDATE "Enrollment" SET "status" = $1, "completedAt" = NOW() WHERE "id" = $2',
+      ["COMPLETED", enrollmentId]
     );
 
     await client.query("COMMIT");
