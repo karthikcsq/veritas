@@ -39,10 +39,24 @@ export default function StudyEnrollPage() {
     }
   }, [router, studyId]);
 
-  // Restore existing enrollment from localStorage
+  // Restore existing enrollment from localStorage, verify it still exists
   useEffect(() => {
     const stored = localStorage.getItem(enrollmentKey(studyId));
-    if (stored) setEnrollmentId(stored);
+    if (stored) {
+      // Verify the enrollment still exists on the server
+      fetch(`/api/enrollments/${stored}/responses`)
+        .then((res) => {
+          if (res.ok) {
+            setEnrollmentId(stored);
+          } else {
+            // Enrollment was deleted, clear stale data
+            localStorage.removeItem(enrollmentKey(studyId));
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem(enrollmentKey(studyId));
+        });
+    }
   }, [studyId]);
 
   // Load study details
