@@ -642,20 +642,20 @@ export default function SurveyPage() {
                 className="absolute left-full top-1/2 ml-4 w-[220px] z-20"
                 style={{ animation: "bubbleSlideIn 0.4s ease-out forwards" }}
               >
-                <div className="relative bg-amber-950/80 backdrop-blur-md border border-amber-500/20 rounded-2xl rounded-tl-sm px-4 py-3 text-xs text-amber-100 shadow-xl shadow-amber-900/20">
+                <div className="relative bg-amber-950 backdrop-blur-md border border-amber-500/30 rounded-2xl rounded-tl-sm px-4 py-3 text-xs shadow-xl shadow-amber-900/30">
                   {/* Arrow pointing left */}
-                  <div className="absolute -left-[7px] top-5 w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-r-[7px] border-r-amber-950/80" />
-                  <div className="absolute -left-[6px] top-[21px] w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[6px] border-r-amber-950/80" />
-                  <p className="font-medium leading-relaxed">
+                  <div className="absolute -left-[7px] top-5 w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-r-[7px] border-r-amber-950" />
+                  <div className="absolute -left-[6px] top-[21px] w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[6px] border-r-amber-950" />
+                  <p className="font-medium leading-relaxed text-amber-100">
                     {currentValidity.score < 20
                       ? "Hmm, this doesn't seem related to the question. Mind taking another look?"
                       : "Heads up: your answer might not fully cover what's being asked."}
                   </p>
-                  <p className="mt-2 text-amber-300/50 leading-relaxed">
+                  <p className="mt-2 text-amber-200/80 leading-relaxed">
                     {currentValidity.explanation}
                   </p>
                   <button
-                    className="mt-2.5 text-[11px] text-amber-400/60 hover:text-amber-300 transition-colors"
+                    className="mt-2.5 text-[11px] text-amber-300 hover:text-amber-100 transition-colors"
                     onClick={() => dismissWarning(question.id)}
                   >
                     Dismiss
