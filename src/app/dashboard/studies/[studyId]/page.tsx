@@ -9,8 +9,8 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Gauge,
   Shield,
-  Star,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -164,11 +164,11 @@ export default function StudyDetailPage() {
     },
     {
       label: "Avg Quality",
-      value: stats ? stats.averageQualityScore.toFixed(2) : "\u2014",
+      value: stats ? `${Math.round(stats.averageQualityScore * 100)}%` : "\u2014",
       sub: stats?.averageSimilarityScore !== null && stats?.averageSimilarityScore !== undefined
-        ? `sim ${stats.averageSimilarityScore.toFixed(2)}`
+        ? `sim ${Math.round(stats.averageSimilarityScore * 100)}%`
         : "quality score",
-      icon: Star,
+      icon: Gauge,
       color: "text-[#5dade2]",
       bg: "bg-[#2874a6]/20",
     },

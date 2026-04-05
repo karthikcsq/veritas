@@ -162,7 +162,7 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
               <div className="text-4xl font-bold text-amber-400 tabular-nums">
-                {enrollments.filter((e) => e.status === "IN_PROGRESS").length}
+                {enrollments.filter((e) => e.status === "IN_PROGRESS" || e.status === "VERIFIED").length}
               </div>
               <div className="mt-1 text-sm font-semibold text-amber-300/80">
                 In Progress
