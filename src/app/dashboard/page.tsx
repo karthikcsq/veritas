@@ -1,34 +1,23 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 
-// Mock data — replace with API calls
-const mockStudies = [
-  {
-    id: "1",
-    title: "Pain Management in Adults Over 50",
-    status: "ACTIVE" as const,
-    targetCount: 200,
-    enrollmentCount: 47,
-    completedCount: 31,
-    flaggedCount: 3,
-  },
-  {
-    id: "2",
-    title: "Sleep Quality and Screen Time",
-    status: "DRAFT" as const,
-    targetCount: 150,
-    enrollmentCount: 0,
-    completedCount: 0,
-    flaggedCount: 0,
-  },
-];
+type Study = {
+  id: string;
+  title: string;
+  status: "DRAFT" | "ACTIVE" | "CLOSED";
+  targetCount: number;
+  enrollmentCount: number;
+  completedCount: number;
+  flaggedCount: number;
+};
 
 const statusColor = {
   DRAFT: "secondary",
@@ -37,6 +26,28 @@ const statusColor = {
 } as const;
 
 export default function DashboardPage() {
+  const { data: session } = useSession();
+  const [studies, setStudies] = useState<Study[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/studies")
+      .then((r) => r.json())
+      .then((data) => {
+        setStudies(data.studies ?? []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const totalEnrollments = studies.reduce((s, st) => s + st.enrollmentCount, 0);
+  const totalCompleted = studies.reduce((s, st) => s + st.completedCount, 0);
+  const totalFlagged = studies.reduce((s, st) => s + st.flaggedCount, 0);
+
+  const userName = (session?.user as { name?: string } | undefined)?.name
+    ?? (session?.user as { email?: string } | undefined)?.email
+    ?? "Researcher";
+
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Ambient glow blobs for glass to blur against */}
@@ -54,7 +65,7 @@ export default function DashboardPage() {
             alt="Veritas"
             width={40}
             height={40}
-            className="rounded-full hover:opacity-80 transition-all cursor-pointer"
+            className="hover:opacity-80 transition-all cursor-pointer"
             style={{ filter: "brightness(1.4)" }}
           />
         </Link>
@@ -62,7 +73,7 @@ export default function DashboardPage() {
 
       {/* Sign out — top right */}
       <div className="absolute top-6 right-6 z-10 flex items-center gap-3">
-        <span className="text-sm text-muted-foreground">Dr. Jane Smith</span>
+        <span className="text-sm text-muted-foreground">{userName}</span>
         <Button
           variant="ghost"
           size="sm"
@@ -73,7 +84,7 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 pt-20 pb-8">
+      <div className="max-w-6xl mx-auto px-6 pt-20 pb-8 relative z-[1]">
         {/* Page header */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -90,10 +101,10 @@ export default function DashboardPage() {
         {/* Stats overview */}
         <div className="grid grid-cols-4 gap-4 mb-8">
           {[
-            { label: "Total Studies", value: "2" },
-            { label: "Active Enrollments", value: "47" },
-            { label: "Completed", value: "31" },
-            { label: "Flagged", value: "3" },
+            { label: "Total Studies", value: String(studies.length) },
+            { label: "Active Enrollments", value: String(totalEnrollments) },
+            { label: "Completed", value: String(totalCompleted) },
+            { label: "Flagged", value: String(totalFlagged) },
           ].map((stat) => (
             <Card key={stat.label}>
               <CardContent className="pt-6">
@@ -108,49 +119,62 @@ export default function DashboardPage() {
 
         {/* Studies list */}
         <div className="space-y-4">
-          {mockStudies.map((study) => (
-            <Link key={study.id} href={`/dashboard/studies/${study.id}`}>
-              <Card className="hover:border-foreground/20 transition-colors cursor-pointer">
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">{study.title}</h3>
-                        <Badge variant={statusColor[study.status]}>
-                          {study.status}
-                        </Badge>
+          {loading ? (
+            <p className="text-muted-foreground text-center py-8">Loading studies...</p>
+          ) : studies.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-muted-foreground mb-4">No studies yet. Create your first study to get started.</p>
+                <Link href="/dashboard/studies/new">
+                  <Button>Create Study</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : (
+            studies.map((study) => (
+              <Link key={study.id} href={`/dashboard/studies/${study.id}`}>
+                <Card className="hover:border-foreground/20 transition-colors cursor-pointer">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold">{study.title}</h3>
+                          <Badge variant={statusColor[study.status]}>
+                            {study.status}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Target: {study.targetCount} participants
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        Target: {study.targetCount} participants
-                      </p>
+                      <div className="flex items-center gap-6 text-sm">
+                        <div className="text-center">
+                          <div className="font-semibold">
+                            {study.enrollmentCount}
+                          </div>
+                          <div className="text-muted-foreground">Enrolled</div>
+                        </div>
+                        <Separator orientation="vertical" className="h-8" />
+                        <div className="text-center">
+                          <div className="font-semibold">
+                            {study.completedCount}
+                          </div>
+                          <div className="text-muted-foreground">Completed</div>
+                        </div>
+                        <Separator orientation="vertical" className="h-8" />
+                        <div className="text-center">
+                          <div className="font-semibold text-destructive">
+                            {study.flaggedCount}
+                          </div>
+                          <div className="text-muted-foreground">Flagged</div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-6 text-sm">
-                      <div className="text-center">
-                        <div className="font-semibold">
-                          {study.enrollmentCount}
-                        </div>
-                        <div className="text-muted-foreground">Enrolled</div>
-                      </div>
-                      <Separator orientation="vertical" className="h-8" />
-                      <div className="text-center">
-                        <div className="font-semibold">
-                          {study.completedCount}
-                        </div>
-                        <div className="text-muted-foreground">Completed</div>
-                      </div>
-                      <Separator orientation="vertical" className="h-8" />
-                      <div className="text-center">
-                        <div className="font-semibold text-destructive">
-                          {study.flaggedCount}
-                        </div>
-                        <div className="text-muted-foreground">Flagged</div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                  </CardContent>
+                </Card>
+              </Link>
+            ))
+          )}
         </div>
       </div>
     </div>
