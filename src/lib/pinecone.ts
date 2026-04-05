@@ -5,7 +5,7 @@ import { Pinecone } from "@pinecone-database/pinecone";
 // Set PINECONE_INDEX to the name of your index (default: "veritas-responses").
 //
 // Index settings to use when creating in the Pinecone dashboard:
-//   Dimensions : 1536   (matches text-embedding-3-small)
+//   Dimensions : 1024   (text-embedding-3-small with dimensions: 1024)
 //   Metric     : cosine
 //   Cloud      : AWS  |  Region: us-east-1  (free tier)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,9 +56,7 @@ export async function upsertResponseVector(
   values: number[],
   metadata: ResponseMetadata
 ): Promise<void> {
-  await getIndex().upsert({
-    records: [{ id: responseId, values, metadata }],
-  });
+  await getIndex().upsert([{ id: responseId, values, metadata }]);
 }
 
 /**
