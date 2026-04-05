@@ -406,7 +406,8 @@ export default function Home() {
           alt="Veritas"
           width={36}
           height={36}
-          className="rounded-full"
+          priority
+          className=""
           style={{ filter: "brightness(1.4)" }}
         />
         <span className="text-white font-semibold text-lg tracking-tight">Veritas</span>
@@ -427,16 +428,19 @@ export default function Home() {
           />
         </div>
 
-        {/* Balatro liquid smoke — constrained around globe */}
+        {/* Balatro liquid smoke — aligned with globe position */}
         <div
-          className="absolute inset-x-0 bottom-0 flex justify-center pointer-events-none z-[4]"
-          style={{ top: "-20%", opacity: auroraOpacity, transition: "opacity 2s" }}
+          className="absolute inset-0 pointer-events-none z-[4] overflow-hidden"
+          style={{ opacity: auroraOpacity, transition: "opacity 2s" }}
         >
           <div
             style={{
               width: "1350px",
               height: "1350px",
-              position: "relative",
+              position: "absolute",
+              top: "50%",
+              right: "28%",
+              transform: "translate(50%, -50%)",
               opacity: 0.75,
               maskImage: "radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.4) 38%, rgba(0,0,0,0.7) 45%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.2) 65%, transparent 78%)",
               WebkitMaskImage: "radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.4) 38%, rgba(0,0,0,0.7) 45%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.2) 65%, transparent 78%)",
@@ -470,7 +474,18 @@ export default function Home() {
         <div className="absolute inset-0 z-[40] flex items-center pointer-events-none">
           <div className="w-full max-w-7xl mx-auto px-8 sm:px-16">
             <div className="pointer-events-auto space-y-8 max-w-xl">
-              <div className="flex items-center gap-3 opacity-0 animate-[fadeSlideUp_1.2s_ease-out_1.4s_forwards]">
+              <h1
+                className="text-5xl sm:text-7xl font-bold tracking-tight text-white text-left opacity-0 animate-[fadeSlideUp_1.2s_ease-out_1.4s_forwards]"
+              >
+                Trust your research data.
+              </h1>
+
+              <p className="text-lg sm:text-xl font-normal text-white/70 leading-relaxed max-w-md opacity-0 animate-[fadeSlideUp_1.2s_ease-out_1.6s_forwards]">
+                Cryptographic proof-of-personhood with AI-powered quality scoring
+                to eliminate fraud from clinical research.
+              </p>
+
+              <div className="flex items-center gap-3 opacity-0 animate-[fadeSlideUp_1.2s_ease-out_2.0s_forwards]">
                 <button
                   onClick={() => setModal("login")}
                   className="h-9 px-5 rounded-full text-sm font-medium text-white/60 hover:text-white bg-white/5 hover:bg-white/10 backdrop-blur-xl border border-white/10 hover:border-white/20 transition-all"
@@ -484,17 +499,6 @@ export default function Home() {
                   Get Started
                 </button>
               </div>
-
-              <h1
-                className="text-5xl sm:text-7xl font-bold tracking-tight text-white text-left opacity-0 animate-[fadeSlideUp_1.2s_ease-out_1.6s_forwards]"
-              >
-                Trust your research data.
-              </h1>
-
-              <p className="text-lg sm:text-xl font-normal text-white/70 leading-relaxed max-w-md opacity-0 animate-[fadeSlideUp_1.2s_ease-out_2.0s_forwards]">
-                Cryptographic proof-of-personhood with AI-powered quality scoring
-                to eliminate fraud from clinical research.
-              </p>
             </div>
           </div>
         </div>
