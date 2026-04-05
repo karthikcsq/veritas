@@ -103,13 +103,13 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
   return (
     <div className="space-y-8">
       {/* Similarity matrix */}
-      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+      <Card className="border-0 shadow-sm ring-1 ring-white/10">
         <CardHeader className="px-6 pt-6">
           <CardTitle className="text-lg">Answer Similarity Matrix</CardTitle>
           <CardDescription>
             Pairwise semantic similarity between responses across questions
             (embedding cosine similarity). Scores below{" "}
-            <span className="font-semibold text-rose-600">0.35</span> between
+            <span className="font-semibold text-rose-400">0.35</span> between
             non-identical questions may indicate contradictions or topic drift.
           </CardDescription>
         </CardHeader>
@@ -160,7 +160,7 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
               }}
             />
             <span>Low → High similarity</span>
-            <span className="ml-2 rounded bg-rose-50 px-2 py-0.5 text-rose-600">
+            <span className="ml-2 rounded bg-rose-50 px-2 py-0.5 text-rose-400">
               Q1 × Q3 = 0.28 — low overlap expected (scale vs. treatments)
             </span>
           </div>
@@ -169,7 +169,7 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
 
       <div className="grid grid-cols-2 gap-8">
         {/* Time spent per question */}
-        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <Card className="border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="px-6 pt-6">
             <CardTitle className="text-lg">Avg Time per Question</CardTitle>
             <CardDescription>
@@ -205,21 +205,21 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
               </BarChart>
             </ResponsiveContainer>
             <div className="mt-2 flex gap-4 text-xs">
-              <span className="flex items-center gap-1 text-rose-600">
+              <span className="flex items-center gap-1 text-rose-400">
                 <span className="h-2 w-2 rounded-full bg-rose-500" /> &lt;20s — suspicious
               </span>
-              <span className="flex items-center gap-1 text-amber-600">
+              <span className="flex items-center gap-1 text-amber-400">
                 <span className="h-2 w-2 rounded-full bg-amber-400" /> 20–50s — borderline
               </span>
-              <span className="flex items-center gap-1 text-violet-600">
-                <span className="h-2 w-2 rounded-full bg-violet-600" /> &gt;50s — expected
+              <span className="flex items-center gap-1 text-[#3498db]">
+                <span className="h-2 w-2 rounded-full bg-[#2874a6]" /> &gt;50s — expected
               </span>
             </div>
           </CardContent>
         </Card>
 
         {/* Response length vs quality */}
-        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <Card className="border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="px-6 pt-6">
             <CardTitle className="text-lg">Response Length vs. Quality</CardTitle>
             <CardDescription>
@@ -277,7 +277,7 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
       </div>
 
       {/* Consistency scores */}
-      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+      <Card className="border-0 shadow-sm ring-1 ring-white/10">
         <CardHeader className="px-6 pt-6">
           <CardTitle className="text-lg">Semantic Consistency Scores</CardTitle>
           <CardDescription>
@@ -296,7 +296,7 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
                   {p.id}
                 </div>
                 <div className="flex-1">
-                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
                     <div
                       className={`h-full rounded-full transition-all ${
                         p.score >= 0.7
@@ -312,17 +312,17 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
                 <div
                   className={`w-10 text-right text-sm font-bold tabular-nums ${
                     p.score >= 0.7
-                      ? "text-emerald-600"
+                      ? "text-emerald-400"
                       : p.score >= 0.5
-                      ? "text-amber-600"
-                      : "text-rose-600"
+                      ? "text-amber-400"
+                      : "text-rose-400"
                   }`}
                 >
                   {p.score.toFixed(2)}
                 </div>
                 {p.flag && (
                   <div
-                    className="max-w-xs truncate text-xs text-rose-600"
+                    className="max-w-xs truncate text-xs text-rose-400"
                     title={p.flag}
                   >
                     ⚠ {p.flag}

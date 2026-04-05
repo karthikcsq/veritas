@@ -15,8 +15,6 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverviewTab } from "@/components/analytics/overview-tab";
 import { IntegrityTab } from "@/components/analytics/integrity-tab";
@@ -130,7 +128,7 @@ export default function StudyDetailPage() {
   const STAT_PILLS = [
     {
       label: "Enrolled",
-      value: stats ? String(stats.totalEnrollments) : "—",
+      value: stats ? String(stats.totalEnrollments) : "\u2014",
       sub: stats ? `${stats.completed} completed` : "",
       icon: Users,
       color: "text-sky-300",
@@ -138,7 +136,7 @@ export default function StudyDetailPage() {
     },
     {
       label: "Completed",
-      value: stats ? String(stats.completed) : "—",
+      value: stats ? String(stats.completed) : "\u2014",
       sub: stats && stats.totalEnrollments > 0
         ? `${((stats.completed / stats.totalEnrollments) * 100).toFixed(1)}%`
         : "",
@@ -148,7 +146,7 @@ export default function StudyDetailPage() {
     },
     {
       label: "Flagged",
-      value: stats ? String(stats.flagged) : "—",
+      value: stats ? String(stats.flagged) : "\u2014",
       sub: stats && stats.totalEnrollments > 0
         ? `${((stats.flagged / stats.totalEnrollments) * 100).toFixed(1)}% of total`
         : "",
@@ -158,7 +156,7 @@ export default function StudyDetailPage() {
     },
     {
       label: "In Progress",
-      value: stats ? String(stats.inProgress) : "—",
+      value: stats ? String(stats.inProgress) : "\u2014",
       sub: "active",
       icon: Shield,
       color: "text-orange-300",
@@ -166,21 +164,28 @@ export default function StudyDetailPage() {
     },
     {
       label: "Avg Quality",
-      value: stats ? stats.averageQualityScore.toFixed(2) : "—",
+      value: stats ? stats.averageQualityScore.toFixed(2) : "\u2014",
       sub: stats?.averageSimilarityScore !== null && stats?.averageSimilarityScore !== undefined
         ? `sim ${stats.averageSimilarityScore.toFixed(2)}`
         : "quality score",
       icon: Star,
-      color: "text-violet-300",
-      bg: "bg-violet-500/20",
+      color: "text-[#5dade2]",
+      bg: "bg-[#2874a6]/20",
     },
   ];
 
   return (
-    <div className="bg-slate-50 min-h-screen">
-      <Tabs defaultValue="overview" className="flex-col">
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Ambient glow blobs for glass effect */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="ambient-blob-1 absolute -top-60 -left-60 h-[800px] w-[800px] rounded-full bg-[#1a5276]/20 blur-[150px]" />
+        <div className="ambient-blob-2 absolute top-1/4 -right-40 h-[700px] w-[700px] rounded-full bg-[#2874a6]/15 blur-[130px]" />
+        <div className="ambient-blob-3 absolute -bottom-60 left-1/4 h-[700px] w-[700px] rounded-full bg-[#1b4f72]/12 blur-[130px]" />
+        <div className="ambient-blob-2 absolute top-2/3 left-1/2 h-[500px] w-[500px] rounded-full bg-[#21618c]/10 blur-[120px]" />
+      </div>
+      <Tabs defaultValue="overview" className="flex-col relative z-[1]">
         <div className="sticky top-0 z-50">
-          <div className="bg-linear-to-r from-slate-900 via-violet-950 to-slate-900">
+          <div className="bg-gradient-to-r from-slate-900 via-[#1a3d5c] to-slate-900">
             <div className="mx-auto max-w-7xl px-6">
               <div className="flex items-center justify-between py-4">
                 <div className="flex items-center gap-4">
@@ -192,7 +197,7 @@ export default function StudyDetailPage() {
                   <div className="h-5 w-px bg-white/15" />
                   <div>
                     <h1 className="text-xl font-bold text-white">
-                      {study?.title ?? "Loading…"}
+                      {study?.title ?? "Loading\u2026"}
                     </h1>
                     <div className="mt-0.5 flex items-center gap-2.5 text-sm">
                       {study && (() => {
@@ -209,7 +214,7 @@ export default function StudyDetailPage() {
                           <span className="text-white/50">
                             {stats.totalEnrollments} / {study.targetCount} enrolled
                           </span>
-                          <span className="text-white/30">·</span>
+                          <span className="text-white/30">&middot;</span>
                           <span className="flex items-center gap-1 text-emerald-400">
                             <TrendingUp className="h-3.5 w-3.5" />
                             {stats.completed} completed
@@ -261,14 +266,14 @@ export default function StudyDetailPage() {
             </div>
           </div>
 
-          <div className="border-b bg-white shadow-sm">
+          <div className="border-b border-white/10 bg-white/[0.03] backdrop-blur-xl">
             <div className="mx-auto max-w-7xl px-6">
               <TabsList variant="line" className="h-auto w-full justify-start rounded-none bg-transparent p-0 gap-0">
                 {TABS.map((tab) => (
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className="h-auto rounded-none border-b-2 border-transparent px-5 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-active:border-violet-600 data-active:text-violet-700"
+                    className="h-auto rounded-none border-b-2 border-transparent px-5 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-active:border-[#3498db] data-active:text-[#5dade2]"
                   >
                     {tab.label}
                   </TabsTrigger>

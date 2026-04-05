@@ -34,6 +34,23 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
+        // Demo accounts for hackathon presentation
+        const demoAccounts: Record<string, { password: string; user: AuthUser }> = {
+          "researcher@demo.veritas": {
+            password: "demo123",
+            user: { id: "demo-researcher", email: "researcher@demo.veritas", name: "Dr. Jane Smith", requiresOnboarding: false },
+          },
+          "participant@demo.veritas": {
+            password: "demo123",
+            user: { id: "demo-participant", email: "participant@demo.veritas", name: "Demo Participant", requiresOnboarding: false },
+          },
+        };
+
+        const demo = demoAccounts[credentials.email];
+        if (demo && credentials.password === demo.password) {
+          return demo.user;
+        }
+
         const result = await pool.query(
           'SELECT "id", "email", "name", "passwordHash" FROM "Researcher" WHERE "email" = $1',
           [credentials.email]
@@ -111,13 +128,18 @@ export const authOptions: NextAuthOptions = {
         token.requiresOnboarding = (user as AuthUser).requiresOnboarding;
       }
       if (isTokenWithId(token)) {
-        const result = await pool.query(
-          'SELECT "name" FROM "Researcher" WHERE "id" = $1',
-          [token.id]
-        );
-        const currentResearcher = result.rows[0];
-        if (currentResearcher) {
-          token.requiresOnboarding = getUserOnboardingStatus(currentResearcher);
+        // Skip DB lookup for demo accounts
+        if (token.id === "demo-researcher" || token.id === "demo-participant") {
+          token.requiresOnboarding = false;
+        } else {
+          const result = await pool.query(
+            'SELECT "name" FROM "Researcher" WHERE "id" = $1',
+            [token.id]
+          );
+          const currentResearcher = result.rows[0];
+          if (currentResearcher) {
+            token.requiresOnboarding = getUserOnboardingStatus(currentResearcher);
+          }
         }
       }
       return token;

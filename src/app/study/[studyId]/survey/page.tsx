@@ -2,9 +2,20 @@
 
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { QuestionType, QuestionDependency, QuestionConfig, ValidateResponseResponse } from "@/types";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import type {
+  QuestionType,
+  QuestionDependency,
+  QuestionConfig,
+  ValidateResponseResponse,
+} from "@/types";
 
 interface SurveyQuestion {
   id: string;
@@ -17,7 +28,10 @@ interface SurveyQuestion {
   dependsOn?: QuestionDependency | null;
 }
 
-function evaluateDependency(dep: QuestionDependency, answers: Record<string, string>): boolean {
+function evaluateDependency(
+  dep: QuestionDependency,
+  answers: Record<string, string>
+): boolean {
   const answer = answers[dep.questionId];
   if (answer === undefined || answer === "") return false;
 
@@ -67,7 +81,10 @@ interface ValidityState {
   dismissed: boolean;
 }
 
-function highlightMissedParts(prompt: string, missedParts: string[]): React.ReactNode {
+function highlightMissedParts(
+  prompt: string,
+  missedParts: string[]
+): React.ReactNode {
   if (missedParts.length === 0) return prompt;
 
   const sortedParts = [...missedParts].sort((a, b) => {
@@ -89,7 +106,7 @@ function highlightMissedParts(prompt: string, missedParts: string[]): React.Reac
     segments.push(
       <mark
         key={idx}
-        className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5 underline decoration-yellow-500 decoration-2 underline-offset-2"
+        className="bg-amber-500/30 text-amber-200 rounded-sm px-0.5 underline decoration-amber-400 decoration-2 underline-offset-2"
       >
         {prompt.slice(idx, idx + part.length)}
       </mark>
@@ -104,7 +121,6 @@ function highlightMissedParts(prompt: string, missedParts: string[]): React.Reac
   return <>{segments}</>;
 }
 
-/** A page groups a root question with all its direct dependents. */
 interface QuestionPage {
   root: SurveyQuestion;
   dependents: SurveyQuestion[];
@@ -131,12 +147,23 @@ export default function SurveyPage() {
         const res = await fetch(`/api/studies/${studyId}/public`);
         if (res.ok) {
           const data = await res.json();
-          const qs = (data.study.questions ?? []).map((q: SurveyQuestion) => ({
-            ...q,
-            options: typeof q.options === "string" ? JSON.parse(q.options as unknown as string) : q.options,
-            config: typeof q.config === "string" ? JSON.parse(q.config as unknown as string) : q.config,
-            dependsOn: typeof q.dependsOn === "string" ? JSON.parse(q.dependsOn as unknown as string) : q.dependsOn,
-          }));
+          const qs = (data.study.questions ?? []).map(
+            (q: SurveyQuestion) => ({
+              ...q,
+              options:
+                typeof q.options === "string"
+                  ? JSON.parse(q.options as unknown as string)
+                  : q.options,
+              config:
+                typeof q.config === "string"
+                  ? JSON.parse(q.config as unknown as string)
+                  : q.config,
+              dependsOn:
+                typeof q.dependsOn === "string"
+                  ? JSON.parse(q.dependsOn as unknown as string)
+                  : q.dependsOn,
+            })
+          );
           setQuestions(qs);
           if (qs.length > 0) {
             setTimeStarted({ [qs[0].id]: Date.now() });
@@ -149,18 +176,17 @@ export default function SurveyPage() {
     if (studyId) loadQuestions();
   }, [studyId]);
 
-  // Group questions into pages: root questions + their dependents
   const pages: QuestionPage[] = useMemo(() => {
     const rootQuestions = questions.filter((q) => !q.dependsOn);
     return rootQuestions.map((root) => {
       const dependents = questions.filter(
-        (q) => q.dependsOn && q.dependsOn.questionId === `order_${root.order}`
+        (q) =>
+          q.dependsOn && q.dependsOn.questionId === `order_${root.order}`
       );
       return { root, dependents };
     });
   }, [questions]);
 
-  // Visible questions on the current page (root + visible dependents)
   const currentPage = pages[currentPageIndex];
   const visiblePageQuestions: SurveyQuestion[] = useMemo(() => {
     if (!currentPage) return [];
@@ -174,7 +200,10 @@ export default function SurveyPage() {
   }, [currentPage, answers]);
 
   const isLastPage = currentPageIndex === pages.length - 1;
-  const progress = pages.length > 0 ? ((currentPageIndex + 1) / pages.length) * 100 : 0;
+  const progress =
+    pages.length > 0
+      ? ((currentPageIndex + 1) / pages.length) * 100
+      : 0;
 
   function setAnswer(questionId: string, value: string) {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -193,13 +222,15 @@ export default function SurveyPage() {
     } else {
       const nextPage = pages[currentPageIndex + 1];
       if (nextPage) {
-        setTimeStarted((prev) => ({ ...prev, [nextPage.root.id]: Date.now() }));
+        setTimeStarted((prev) => ({
+          ...prev,
+          [nextPage.root.id]: Date.now(),
+        }));
       }
       setCurrentPageIndex((i) => i + 1);
     }
   }
 
-  // Collect all visible questions across all pages for submission
   function getAllVisibleQuestions(): SurveyQuestion[] {
     const result: SurveyQuestion[] = [];
     for (const page of pages) {
@@ -229,11 +260,14 @@ export default function SurveyPage() {
         timeSpentMs: now - (timeStarted[q.id] ?? now),
       }));
 
-      const res = await fetch(`/api/enrollments/${enrollmentId}/responses`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ responses: responsePayload }),
-      });
+      const res = await fetch(
+        `/api/enrollments/${enrollmentId}/responses`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ responses: responsePayload }),
+        }
+      );
 
       if (res.ok) {
         setSubmitted(true);
@@ -246,24 +280,22 @@ export default function SurveyPage() {
   const validateAndProceed = useCallback(async () => {
     if (!currentPage) return;
 
-    // Check that all required visible questions on this page have answers
     for (const q of visiblePageQuestions) {
       if (q.required && !answers[q.id]) return;
     }
 
-    // Find the first text question on this page that needs LLM validation
     const textQs = visiblePageQuestions.filter(
-      (q) => (q.type === "LONG_TEXT" || q.type === "SHORT_TEXT") && answers[q.id]
+      (q) =>
+        (q.type === "LONG_TEXT" || q.type === "SHORT_TEXT") &&
+        answers[q.id]
     );
 
-    // Check if any text question needs validation
     const needsValidation = textQs.find((q) => {
       const existing = validity[q.id];
       return !existing?.dismissed && !existing;
     });
 
     if (!needsValidation) {
-      // All validated or non-text, proceed
       advanceToNext();
       return;
     }
@@ -292,7 +324,6 @@ export default function SurveyPage() {
           },
         }));
       } else {
-        // Mark as passed so we don't re-validate
         setValidity((prev) => ({
           ...prev,
           [needsValidation.id]: {
@@ -302,7 +333,6 @@ export default function SurveyPage() {
             dismissed: true,
           },
         }));
-        // Check if there are more text questions to validate
         const remaining = textQs.filter((q) => {
           if (q.id === needsValidation.id) return false;
           const existing = validity[q.id];
@@ -311,14 +341,24 @@ export default function SurveyPage() {
         if (remaining.length === 0) {
           advanceToNext();
         }
-        // If remaining, the user clicks Next again to validate the next one
       }
     } catch {
       advanceToNext();
     } finally {
       setValidating(false);
     }
-  }, [answers, currentPage, visiblePageQuestions, isLastPage, validity, pages, currentPageIndex, timeStarted, enrollmentId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    answers,
+    currentPage,
+    visiblePageQuestions,
+    isLastPage,
+    validity,
+    pages,
+    currentPageIndex,
+    timeStarted,
+    enrollmentId,
+  ]);
 
   function dismissWarning(questionId: string) {
     setValidity((prev) => ({
@@ -329,56 +369,69 @@ export default function SurveyPage() {
 
   if (loadingQuestions) {
     return (
-      <div className="flex-1 flex items-center justify-center px-4">
-        <p className="text-sm text-muted-foreground">Loading survey...</p>
+      <div className="min-h-screen flex items-center justify-center px-4 bg-background">
+        <p className="text-sm text-white/50">Loading survey...</p>
       </div>
     );
   }
 
   if (questions.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center px-4">
-        <p className="text-sm text-destructive">No questions found for this study.</p>
+      <div className="min-h-screen flex items-center justify-center px-4 bg-background">
+        <p className="text-sm text-destructive">
+          No questions found for this study.
+        </p>
       </div>
     );
   }
 
   if (submitted) {
     return (
-      <div className="flex-1 flex items-center justify-center px-4">
+      <div className="min-h-screen flex items-center justify-center px-4 bg-background">
         <Card className="w-full max-w-md text-center">
           <CardContent className="pt-8 pb-8 space-y-4">
-            <div className="mx-auto h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
-              <span className="text-green-600 text-2xl">&#10003;</span>
+            <div className="mx-auto h-16 w-16 rounded-full bg-emerald-500/20 flex items-center justify-center">
+              <span className="text-emerald-400 text-2xl">&#10003;</span>
             </div>
-            <h2 className="text-xl font-bold">Responses Submitted</h2>
-            <p className="text-muted-foreground">
+            <h2 className="text-xl font-bold text-white">
+              Responses Submitted
+            </h2>
+            <p className="text-white/60">
               Thank you for participating. Your responses are being evaluated
-              for quality scoring. Compensation will be processed once the study
-              is complete.
+              for quality scoring. Compensation will be processed once the
+              study is complete.
             </p>
+            <Link href="/">
+              <Button
+                variant="outline"
+                className="mt-2 border-white/10 text-white/70 hover:bg-white/10"
+              >
+                Back to Home
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  // Check if all required visible questions on this page have answers
   const allPageAnswered = visiblePageQuestions.every(
     (q) => !q.required || !!answers[q.id]
   );
 
   return (
-    <div className="flex-1 flex items-center justify-center px-4 py-8">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-background">
       <div className="w-full max-w-lg space-y-4">
         <div className="space-y-1">
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Question {currentPageIndex + 1} of {pages.length}</span>
+          <div className="flex justify-between text-sm text-white/50">
+            <span>
+              Question {currentPageIndex + 1} of {pages.length}
+            </span>
             <span>{Math.round(progress)}%</span>
           </div>
-          <div className="h-2 rounded-full bg-muted overflow-hidden">
+          <div className="h-2 rounded-full bg-white/10 overflow-hidden">
             <div
-              className="h-full bg-primary transition-all duration-300"
+              className="h-full bg-[#3498db] transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -389,136 +442,181 @@ export default function SurveyPage() {
           const isDependent = !!question.dependsOn;
 
           return (
-            <Card key={question.id} className={isDependent ? "ml-4 border-l-4 border-l-primary/30" : ""}>
+            <Card
+              key={question.id}
+              className={
+                isDependent ? "ml-4 border-l-2 border-l-[#3498db]/30" : ""
+              }
+            >
               <CardHeader>
-                <CardTitle className="text-lg">
-                  {currentValidity && !currentValidity.dismissed && currentValidity.missedParts.length > 0
-                    ? highlightMissedParts(question.prompt, currentValidity.missedParts)
+                <CardTitle className="text-lg text-white">
+                  {currentValidity &&
+                  !currentValidity.dismissed &&
+                  currentValidity.missedParts.length > 0
+                    ? highlightMissedParts(
+                        question.prompt,
+                        currentValidity.missedParts
+                      )
                     : question.prompt}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {question.type === "SCALE" && (() => {
-                  const sc = question.config?.scale ?? { min: 1, max: 10 };
-                  const step = sc.step ?? 1;
-                  const values: number[] = [];
-                  for (let n = sc.min; n <= sc.max; n += step) values.push(n);
-                  return (
-                    <div className="space-y-2">
-                      <div className="flex gap-2 flex-wrap">
-                        {values.map((n) => (
-                          <button
-                            key={n}
-                            type="button"
-                            onClick={() => setAnswer(question.id, String(n))}
-                            className={`h-10 w-10 rounded-lg border text-sm font-medium transition-colors ${
-                              answers[question.id] === String(n)
-                                ? "bg-primary text-primary-foreground"
-                                : "hover:bg-muted"
-                            }`}
-                          >
-                            {n}
-                          </button>
-                        ))}
-                      </div>
-                      {(sc.minLabel || sc.maxLabel) && (
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>{sc.minLabel ?? ""}</span>
-                          <span>{sc.maxLabel ?? ""}</span>
+                {question.type === "SCALE" &&
+                  (() => {
+                    const sc = question.config?.scale ?? {
+                      min: 1,
+                      max: 10,
+                    };
+                    const step = sc.step ?? 1;
+                    const values: number[] = [];
+                    for (let n = sc.min; n <= sc.max; n += step)
+                      values.push(n);
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex gap-2 flex-wrap">
+                          {values.map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() =>
+                                setAnswer(question.id, String(n))
+                              }
+                              className={`h-10 w-10 rounded-lg border border-white/10 text-sm font-medium transition-colors ${
+                                answers[question.id] === String(n)
+                                  ? "bg-[#2874a6] text-white border-[#3498db]"
+                                  : "text-white/70 hover:bg-white/10"
+                              }`}
+                            >
+                              {n}
+                            </button>
+                          ))}
                         </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                        {(sc.minLabel || sc.maxLabel) && (
+                          <div className="flex justify-between text-xs text-white/40">
+                            <span>{sc.minLabel ?? ""}</span>
+                            <span>{sc.maxLabel ?? ""}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                 {question.type === "LONG_TEXT" && (
                   <textarea
-                    className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    className="w-full min-h-[120px] rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
                     placeholder="Type your answer..."
                     value={answers[question.id] || ""}
-                    onChange={(e) => setAnswer(question.id, e.target.value)}
+                    onChange={(e) =>
+                      setAnswer(question.id, e.target.value)
+                    }
                   />
                 )}
 
                 {question.type === "SHORT_TEXT" && (
                   <input
                     type="text"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
                     placeholder="Type your answer..."
                     value={answers[question.id] || ""}
-                    onChange={(e) => setAnswer(question.id, e.target.value)}
+                    onChange={(e) =>
+                      setAnswer(question.id, e.target.value)
+                    }
                   />
                 )}
 
-                {question.type === "MULTIPLE_CHOICE" && question.options && (
-                  <div className="space-y-2">
-                    {question.options.map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => setAnswer(question.id, option)}
-                        className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors ${
-                          answers[question.id] === option
-                            ? "bg-primary text-primary-foreground"
-                            : "hover:bg-muted"
-                        }`}
-                      >
-                        {option}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {question.type === "CHECKBOX" && question.options && (() => {
-                  const selected: string[] = (() => {
-                    try { return JSON.parse(answers[question.id] || "[]"); }
-                    catch { return []; }
-                  })();
-                  return (
+                {question.type === "MULTIPLE_CHOICE" &&
+                  question.options && (
                     <div className="space-y-2">
-                      {question.options.map((option) => {
-                        const isChecked = selected.includes(option);
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() => {
-                              const next = isChecked
-                                ? selected.filter((s) => s !== option)
-                                : [...selected, option];
-                              setAnswer(question.id, JSON.stringify(next));
-                            }}
-                            className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors flex items-center gap-3 ${
-                              isChecked
-                                ? "bg-primary text-primary-foreground"
-                                : "hover:bg-muted"
-                            }`}
-                          >
-                            <span className={`h-4 w-4 rounded border flex items-center justify-center text-xs ${
-                              isChecked ? "bg-primary-foreground text-primary" : "border-current"
-                            }`}>
-                              {isChecked ? "\u2713" : ""}
-                            </span>
-                            {option}
-                          </button>
-                        );
-                      })}
+                      {question.options.map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() =>
+                            setAnswer(question.id, option)
+                          }
+                          className={`w-full text-left px-4 py-3 rounded-lg border border-white/10 text-sm transition-colors ${
+                            answers[question.id] === option
+                              ? "bg-[#2874a6] text-white border-[#3498db]"
+                              : "text-white/70 hover:bg-white/10"
+                          }`}
+                        >
+                          {option}
+                        </button>
+                      ))}
                     </div>
-                  );
-                })()}
+                  )}
+
+                {question.type === "CHECKBOX" &&
+                  question.options &&
+                  (() => {
+                    const selected: string[] = (() => {
+                      try {
+                        return JSON.parse(
+                          answers[question.id] || "[]"
+                        );
+                      } catch {
+                        return [];
+                      }
+                    })();
+                    return (
+                      <div className="space-y-2">
+                        {question.options.map((option) => {
+                          const isChecked = selected.includes(option);
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => {
+                                const next = isChecked
+                                  ? selected.filter(
+                                      (s) => s !== option
+                                    )
+                                  : [...selected, option];
+                                setAnswer(
+                                  question.id,
+                                  JSON.stringify(next)
+                                );
+                              }}
+                              className={`w-full text-left px-4 py-3 rounded-lg border border-white/10 text-sm transition-colors flex items-center gap-3 ${
+                                isChecked
+                                  ? "bg-[#2874a6] text-white border-[#3498db]"
+                                  : "text-white/70 hover:bg-white/10"
+                              }`}
+                            >
+                              <span
+                                className={`h-4 w-4 rounded border flex items-center justify-center text-xs ${
+                                  isChecked
+                                    ? "bg-white text-[#2874a6]"
+                                    : "border-white/30"
+                                }`}
+                              >
+                                {isChecked ? "\u2713" : ""}
+                              </span>
+                              {option}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
                 {currentValidity && !currentValidity.dismissed && (
-                  <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                     <p className="font-medium">
                       {currentValidity.score < 20
                         ? "Hmm, this doesn\u2019t seem related to the question \u2014 mind taking another look?"
                         : "Just a heads up \u2014 your answer might not fully cover what\u2019s being asked."}
                     </p>
-                    <p className="mt-1 text-xs opacity-80">
+                    <p className="mt-1 text-xs text-amber-300/70">
                       {currentValidity.explanation}
                     </p>
                     <div className="mt-2 flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => dismissWarning(question.id)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-amber-500/30 text-amber-200 hover:bg-amber-500/20"
+                        onClick={() => dismissWarning(question.id)}
+                      >
                         Keep my answer
                       </Button>
                     </div>
@@ -529,16 +627,19 @@ export default function SurveyPage() {
           );
         })}
 
-        {/* Navigation buttons — outside the question cards */}
         <div className="flex justify-between pt-2">
           <Button
             variant="ghost"
-            onClick={() => setCurrentPageIndex(Math.max(0, currentPageIndex - 1))}
+            className="text-white/60 hover:text-white hover:bg-white/10"
+            onClick={() =>
+              setCurrentPageIndex(Math.max(0, currentPageIndex - 1))
+            }
             disabled={currentPageIndex === 0}
           >
             Previous
           </Button>
           <Button
+            className="bg-[#2874a6] hover:bg-[#3498db] text-white"
             onClick={validateAndProceed}
             disabled={!allPageAnswered || validating || submitting}
           >

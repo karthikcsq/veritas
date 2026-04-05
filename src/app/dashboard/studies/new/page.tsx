@@ -1,14 +1,25 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import type { QuestionDependency, ScaleConfig, DependencyCondition } from "@/types";
+import type {
+  QuestionDependency,
+  ScaleConfig,
+  DependencyCondition,
+} from "@/types";
 
 interface QuestionDraft {
   order: number;
@@ -26,9 +37,10 @@ export default function NewStudyPage() {
   const [description, setDescription] = useState("");
   const [targetCount, setTargetCount] = useState("");
   const [compensation, setCompensation] = useState("");
-  const [pageState, setPageState] = useState<"edit" | "review">("edit");
   const [submitting, setSubmitting] = useState(false);
-  const [analysisPhase, setAnalysisPhase] = useState<"idle" | "creating" | "specificity" | "reverse" | "done">("idle");
+  const [analysisPhase, setAnalysisPhase] = useState<
+    "idle" | "creating" | "specificity" | "reverse" | "done"
+  >("idle");
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [qualityResult, setQualityResult] = useState<{
@@ -39,7 +51,14 @@ export default function NewStudyPage() {
       originalPrompt: string;
       reversePrompt: string;
       reverseType: string;
-      reverseConfig: { scale?: { min: number; max: number; minLabel?: string; maxLabel?: string } } | null;
+      reverseConfig: {
+        scale?: {
+          min: number;
+          max: number;
+          minLabel?: string;
+          maxLabel?: string;
+        };
+      } | null;
       explanation: string;
       suggestedOrder: number;
     }>;
@@ -52,11 +71,20 @@ export default function NewStudyPage() {
       suggestedPrompt: string;
       reason: string;
       suggestedType?: string;
-      suggestedConfig?: { scale?: { min: number; max: number; minLabel?: string; maxLabel?: string } } | null;
+      suggestedConfig?: {
+        scale?: {
+          min: number;
+          max: number;
+          minLabel?: string;
+          maxLabel?: string;
+        };
+      } | null;
     }>;
     message: string;
   } | null>(null);
-  const [acceptedSpecificity, setAcceptedSpecificity] = useState<Set<number>>(new Set());
+  const [acceptedSpecificity, setAcceptedSpecificity] = useState<Set<number>>(
+    new Set()
+  );
   const [createdStudyId, setCreatedStudyId] = useState<string | null>(null);
   const [acceptedRecs, setAcceptedRecs] = useState<Set<string>>(new Set());
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -70,11 +98,9 @@ export default function NewStudyPage() {
     const reordered = updated.map((q, i) => ({ ...q, order: i + 1 }));
     setQuestions(reordered);
 
-    // Build a map from old index (by prompt) to new index
     const newIndexByPrompt = new Map<string, number>();
     reordered.forEach((q, i) => newIndexByPrompt.set(q.prompt, i));
 
-    // Remap specificity suggestion indices to follow their questions
     if (specificityResult) {
       setSpecificityResult({
         ...specificityResult,
@@ -85,18 +111,20 @@ export default function NewStudyPage() {
       });
     }
 
-    // Remap reverse recommendation suggestedOrder to maintain relative distance
     if (qualityResult) {
       setQualityResult({
         ...qualityResult,
         recommendations: qualityResult.recommendations.map((r) => {
           const origNewIdx = newIndexByPrompt.get(r.originalPrompt);
           if (origNewIdx === undefined) return r;
-          // Place the reverse question right after the original (new position + 1 order)
-          // but keep separation: use distance from original's old position
-          const oldOrigIdx = questions.findIndex((q) => q.prompt === r.originalPrompt);
+          const oldOrigIdx = questions.findIndex(
+            (q) => q.prompt === r.originalPrompt
+          );
           const distance = r.suggestedOrder - (oldOrigIdx + 1);
-          const newSuggestedOrder = Math.max(1, Math.min(reordered.length, (origNewIdx + 1) + distance));
+          const newSuggestedOrder = Math.max(
+            1,
+            Math.min(reordered.length, origNewIdx + 1 + distance)
+          );
           return { ...r, suggestedOrder: newSuggestedOrder };
         }),
       });
@@ -106,54 +134,29 @@ export default function NewStudyPage() {
     setDragOverIdx(null);
   }
 
-  function acceptRecommendation(rec: NonNullable<typeof qualityResult>["recommendations"][number]) {
+  function acceptRecommendation(
+    rec: NonNullable<typeof qualityResult>["recommendations"][number]
+  ) {
     if (!createdStudyId) return;
     setAcceptedRecs((prev) => new Set(prev).add(rec.originalPrompt));
 
-    // Find the original question to copy its type and config (reverse should match original)
-    const originalQ = questions.find((q) => q.prompt === rec.originalPrompt);
-    const type = originalQ?.type ?? rec.reverseType ?? "SCALE";
-    const config = originalQ?.scaleConfig
-      ? { scale: originalQ.scaleConfig }
-      : rec.reverseConfig;
-
-    // Insert the reverse question and shift existing orders
     fetch(`/api/studies/${createdStudyId}/add-question`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        type,
+        type: rec.reverseType || "SCALE",
         prompt: rec.reversePrompt,
         order: rec.suggestedOrder,
         required: true,
-        config,
-        insertAndShift: true,
+        config: rec.reverseConfig,
       }),
     }).catch(console.error);
-
-    // Also add to local state
-    const newQ: QuestionDraft = {
-      order: rec.suggestedOrder,
-      type,
-      prompt: rec.reversePrompt,
-      required: true,
-      scaleConfig: originalQ?.scaleConfig,
-    };
-    const updated = [...questions];
-    // Shift orders of questions at or after the insert point
-    for (let j = 0; j < updated.length; j++) {
-      if (updated[j].order >= rec.suggestedOrder) {
-        updated[j] = { ...updated[j], order: updated[j].order + 1 };
-      }
-    }
-    updated.push(newQ);
-    updated.sort((a, b) => a.order - b.order);
-    setQuestions(updated);
   }
 
   function dismissRecommendation(originalPrompt: string) {
     setAcceptedRecs((prev) => new Set(prev).add(originalPrompt));
   }
+
   const [questions, setQuestions] = useState<QuestionDraft[]>([
     { order: 1, type: "LONG_TEXT", prompt: "", required: true },
   ]);
@@ -161,7 +164,12 @@ export default function NewStudyPage() {
   function addQuestion() {
     setQuestions([
       ...questions,
-      { order: questions.length + 1, type: "LONG_TEXT", prompt: "", required: true },
+      {
+        order: questions.length + 1,
+        type: "LONG_TEXT",
+        prompt: "",
+        required: true,
+      },
     ]);
   }
 
@@ -172,24 +180,29 @@ export default function NewStudyPage() {
       if (field.type === "SCALE" && !updated[index].scaleConfig) {
         updated[index].scaleConfig = { min: 1, max: 10 };
       }
-      if ((field.type === "MULTIPLE_CHOICE" || field.type === "CHECKBOX") && !updated[index].options) {
+      if (
+        (field.type === "MULTIPLE_CHOICE" || field.type === "CHECKBOX") &&
+        !updated[index].options
+      ) {
         updated[index].options = [""];
       }
       if (field.type !== "SCALE") delete updated[index].scaleConfig;
-      if (field.type !== "MULTIPLE_CHOICE" && field.type !== "CHECKBOX") delete updated[index].options;
+      if (field.type !== "MULTIPLE_CHOICE" && field.type !== "CHECKBOX")
+        delete updated[index].options;
     }
     setQuestions(updated);
   }
 
   function removeQuestion(index: number) {
-    const removed = questions[index];
-    const filtered = questions.filter((_, i) => i !== index).map((q, i) => {
-      const updated = { ...q, order: i + 1 };
-      if (updated.dependsOn?.questionId === `idx_${index}`) {
-        delete updated.dependsOn;
-      }
-      return updated;
-    });
+    const filtered = questions
+      .filter((_, i) => i !== index)
+      .map((q, i) => {
+        const updated = { ...q, order: i + 1 };
+        if (updated.dependsOn?.questionId === `idx_${index}`) {
+          delete updated.dependsOn;
+        }
+        return updated;
+      });
     setQuestions(filtered);
   }
 
@@ -209,7 +222,9 @@ export default function NewStudyPage() {
 
   function removeOption(qIndex: number, optIndex: number) {
     const updated = [...questions];
-    updated[qIndex].options = (updated[qIndex].options || []).filter((_, i) => i !== optIndex);
+    updated[qIndex].options = (updated[qIndex].options || []).filter(
+      (_, i) => i !== optIndex
+    );
     setQuestions(updated);
   }
 
@@ -221,7 +236,6 @@ export default function NewStudyPage() {
     setAnalysisProgress(0);
 
     try {
-      // Phase 1: Create the study
       const progressInterval = setInterval(() => {
         setAnalysisProgress((p) => Math.min(p + 2, 90));
       }, 200);
@@ -266,17 +280,21 @@ export default function NewStudyPage() {
       }, 200);
 
       try {
-        const specRes = await fetch(`/api/studies/${studyId}/analyze-specificity`, { method: "POST" });
+        const specRes = await fetch(
+          `/api/studies/${studyId}/analyze-specificity`,
+          { method: "POST" }
+        );
         if (specRes.ok) {
           const specData = await specRes.json();
           if (specData.suggestions?.length > 0) {
             setSpecificityResult(specData);
             clearInterval(specInterval);
             setAnalysisProgress(100);
-            setPageState("review");
             const firstIdx = specData.suggestions[0].questionIndex;
             setTimeout(() => {
-              document.getElementById(`spec-${firstIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+              document
+                .getElementById(`spec-${firstIdx}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
             }, 200);
             setAnalysisPhase("done");
             setSubmitting(false);
@@ -289,7 +307,6 @@ export default function NewStudyPage() {
       clearInterval(specInterval);
       setAnalysisProgress(100);
 
-      // Phase 3: Reverse-score analysis (only if no specificity issues)
       await runReverseAnalysis(studyId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -307,7 +324,10 @@ export default function NewStudyPage() {
     }, 200);
 
     try {
-      const revRes = await fetch(`/api/studies/${studyId}/analyze-reverse`, { method: "POST" });
+      const revRes = await fetch(
+        `/api/studies/${studyId}/analyze-reverse`,
+        { method: "POST" }
+      );
       clearInterval(revInterval);
       setAnalysisProgress(100);
 
@@ -315,19 +335,22 @@ export default function NewStudyPage() {
         const revData = await revRes.json();
         setQualityResult(revData);
         setAnalysisPhase("done");
-        setPageState("review");
 
         if (revData.recommendations?.length > 0) {
           const firstOriginal = revData.recommendations[0].originalPrompt;
           const idx = questions.findIndex((q) => q.prompt === firstOriginal);
           if (idx >= 0) {
             setTimeout(() => {
-              document.getElementById(`rec-${idx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+              document
+                .getElementById(`rec-${idx}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
             }, 200);
           }
         } else {
           setTimeout(() => {
-            document.getElementById("quality-summary")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            document
+              .getElementById("quality-summary")
+              ?.scrollIntoView({ behavior: "smooth", block: "center" });
           }, 200);
         }
       }
@@ -338,31 +361,25 @@ export default function NewStudyPage() {
     }
   }
 
-  function handleSpecificityDone(newAccepted: Set<number>) {
-    const remaining = specificityResult?.suggestions.filter(
-      (s) => !newAccepted.has(s.questionIndex)
-    );
-    if (remaining && remaining.length > 0) {
-      setTimeout(() => {
-        document.getElementById(`spec-${remaining[0].questionIndex}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 100);
-    } else if (createdStudyId) {
-      runReverseAnalysis(createdStudyId);
-    }
-  }
-
-  function acceptSpecificity(suggestion: NonNullable<typeof specificityResult>["suggestions"][number]) {
+  function acceptSpecificity(
+    suggestion: NonNullable<typeof specificityResult>["suggestions"][number]
+  ) {
     if (!createdStudyId) return;
-    const newAccepted = new Set(acceptedSpecificity).add(suggestion.questionIndex);
-    setAcceptedSpecificity(newAccepted);
+    setAcceptedSpecificity((prev) =>
+      new Set(prev).add(suggestion.questionIndex)
+    );
 
-    // Update the question in local state (prompt + optional type/config)
     const updated = [...questions];
     if (updated[suggestion.questionIndex]) {
-      const patch: Partial<QuestionDraft> = { prompt: suggestion.suggestedPrompt };
+      const patch: Partial<QuestionDraft> = {
+        prompt: suggestion.suggestedPrompt,
+      };
       if (suggestion.suggestedType) {
         patch.type = suggestion.suggestedType;
-        if (suggestion.suggestedType === "SCALE" && suggestion.suggestedConfig?.scale) {
+        if (
+          suggestion.suggestedType === "SCALE" &&
+          suggestion.suggestedConfig?.scale
+        ) {
           patch.scaleConfig = suggestion.suggestedConfig.scale;
         } else if (suggestion.suggestedType !== "SCALE") {
           patch.scaleConfig = undefined;
@@ -370,11 +387,13 @@ export default function NewStudyPage() {
       } else if (suggestion.suggestedConfig?.scale) {
         patch.scaleConfig = suggestion.suggestedConfig.scale;
       }
-      updated[suggestion.questionIndex] = { ...updated[suggestion.questionIndex], ...patch };
+      updated[suggestion.questionIndex] = {
+        ...updated[suggestion.questionIndex],
+        ...patch,
+      };
       setQuestions(updated);
     }
 
-    // Update the question in DB
     const body: Record<string, unknown> = {
       questionOrder: suggestion.questionIndex + 1,
       prompt: suggestion.suggestedPrompt,
@@ -387,52 +406,80 @@ export default function NewStudyPage() {
       body: JSON.stringify(body),
     }).catch(console.error);
 
-    handleSpecificityDone(newAccepted);
+    const remaining = specificityResult?.suggestions.filter(
+      (s) =>
+        !acceptedSpecificity.has(s.questionIndex) &&
+        s.questionIndex !== suggestion.questionIndex
+    );
+    if (remaining && remaining.length > 0) {
+      setTimeout(() => {
+        document
+          .getElementById(`spec-${remaining[0].questionIndex}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    } else if (createdStudyId) {
+      runReverseAnalysis(createdStudyId);
+    }
   }
 
   function dismissSpecificity(questionIndex: number) {
-    const newAccepted = new Set(acceptedSpecificity).add(questionIndex);
-    setAcceptedSpecificity(newAccepted);
-    handleSpecificityDone(newAccepted);
+    setAcceptedSpecificity((prev) => new Set(prev).add(questionIndex));
+
+    const remaining = specificityResult?.suggestions.filter(
+      (s) =>
+        !acceptedSpecificity.has(s.questionIndex) &&
+        s.questionIndex !== questionIndex
+    );
+    if (remaining && remaining.length > 0) {
+      setTimeout(() => {
+        document
+          .getElementById(`spec-${remaining[0].questionIndex}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    } else if (createdStudyId) {
+      runReverseAnalysis(createdStudyId);
+    }
   }
 
   return (
-    <div className="px-6 py-8">
-      <div className="flex items-center gap-4 mb-6">
-        {pageState === "review" ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              // Delete the draft study so they can re-create
-              if (createdStudyId) {
-                fetch(`/api/studies/${createdStudyId}`, { method: "DELETE" }).catch(() => {});
-              }
-              setPageState("edit");
-              setCreatedStudyId(null);
-              setAnalysisPhase("idle");
-              setSpecificityResult(null);
-              setQualityResult(null);
-              setAcceptedSpecificity(new Set());
-              setAcceptedRecs(new Set());
-              window.scrollTo(0, 0);
-            }}
-          >
-            &larr; Back to Edit
-          </Button>
-        ) : (
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Ambient glow blobs */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="ambient-blob-1 absolute -top-60 -left-60 h-[800px] w-[800px] rounded-full bg-[#1a5276]/20 blur-[150px]" />
+        <div className="ambient-blob-2 absolute top-1/4 -right-40 h-[700px] w-[700px] rounded-full bg-[#2874a6]/15 blur-[130px]" />
+        <div className="ambient-blob-3 absolute -bottom-60 left-1/4 h-[700px] w-[700px] rounded-full bg-[#1b4f72]/12 blur-[130px]" />
+      </div>
+
+      {/* Logo */}
+      <div className="absolute top-6 left-6 z-10">
+        <Link href="/dashboard">
+          <Image
+            src="/logo.png"
+            alt="Veritas"
+            width={40}
+            height={40}
+            className="rounded-full hover:opacity-80 transition-all cursor-pointer"
+            style={{ filter: "brightness(1.4)" }}
+          />
+        </Link>
+      </div>
+
+      <div className="relative z-[1] max-w-2xl mx-auto px-6 pt-20 pb-12">
+        <div className="flex items-center gap-4 mb-6">
           <Link href="/dashboard">
-            <Button variant="ghost" size="sm">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-white/60 hover:text-white hover:bg-white/10"
+            >
               &larr; Back
             </Button>
           </Link>
-        )}
-        <h1 className="font-semibold text-lg">
-          {pageState === "review" ? "Review Suggestions" : "Create New Study"}
-        </h1>
-      </div>
+          <h1 className="font-semibold text-lg text-white">
+            Create New Study
+          </h1>
+        </div>
 
-      <div className="max-w-2xl mx-auto">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Study info */}
           <Card>
@@ -451,14 +498,13 @@ export default function NewStudyPage() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   required
-                  disabled={pageState === "review"}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <textarea
                   id="description"
-                  className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="w-full min-h-[100px] rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
                   placeholder="A survey study examining..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -503,359 +549,556 @@ export default function NewStudyPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {questions.map((q, i) => {
-                // Find recommendation that targets this question's order position
-                // Clamp suggestedOrder to valid range (AI sometimes suggests order > question count)
-                // Match reverse recommendation to the original question it reverses
                 const rec = qualityResult?.recommendations.find(
-                  (r) => r.originalPrompt === q.prompt && !acceptedRecs.has(r.originalPrompt)
+                  (r) =>
+                    r.suggestedOrder === q.order &&
+                    !acceptedRecs.has(r.originalPrompt)
                 );
-                const recPair = rec ? qualityResult?.reversePairs.find(
-                  (p) => qualityResult?.recommendations.some(
-                    (r) => r.originalPrompt === rec.originalPrompt && (p.construct.toLowerCase().includes(rec.originalPrompt.slice(0, 20).toLowerCase()) || true)
-                  )
-                ) : null;
                 return (
-                <div
-                  key={i}
-                  draggable
-                  onDragStart={() => setDragIdx(i)}
-                  onDragOver={(e) => { e.preventDefault(); setDragOverIdx(i); }}
-                  onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
-                  onDrop={() => handleDrop(i)}
-                  className={`${dragIdx === i ? "opacity-40" : ""} ${dragOverIdx === i && dragIdx !== i ? "border-t-2 border-t-primary" : ""}`}
-                >
-                <div className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium shrink-0 mt-1 cursor-grab">
-                      {q.order}
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <Input
-                        placeholder="Enter your question..."
-                        value={q.prompt}
-                        onChange={(e) => updateQuestion(i, { prompt: e.target.value })}
-                        required
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={q.type}
-                          onChange={(e) => updateQuestion(i, { type: e.target.value })}
-                        >
-                          <option value="LONG_TEXT">Long Text</option>
-                          <option value="SHORT_TEXT">Short Text</option>
-                          <option value="MULTIPLE_CHOICE">Multiple Choice</option>
-                          <option value="CHECKBOX">Checkbox (Multi-select)</option>
-                          <option value="SCALE">Number Scale</option>
-                        </select>
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={q.required}
-                            onChange={(e) => updateQuestion(i, { required: e.target.checked })}
-                          />
-                          Required
-                        </label>
-                      </div>
-                    </div>
-                    {questions.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeQuestion(i)}
-                        className="mt-1"
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Options editor for MCQ / Checkbox */}
-                  {(q.type === "MULTIPLE_CHOICE" || q.type === "CHECKBOX") && (
-                    <div className="ml-11 space-y-2">
-                      <Label className="text-xs text-muted-foreground">Options</Label>
-                      {(q.options || []).map((opt, oi) => (
-                        <div key={oi} className="flex gap-2">
+                  <div
+                    key={i}
+                    draggable
+                    onDragStart={() => setDragIdx(i)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverIdx(i);
+                    }}
+                    onDragEnd={() => {
+                      setDragIdx(null);
+                      setDragOverIdx(null);
+                    }}
+                    onDrop={() => handleDrop(i)}
+                    className={`${dragIdx === i ? "opacity-40" : ""} ${
+                      dragOverIdx === i && dragIdx !== i
+                        ? "border-t-2 border-t-[#3498db]"
+                        : ""
+                    }`}
+                  >
+                    <div className="border border-white/10 rounded-lg p-4 space-y-3 bg-white/[0.02]">
+                      <div className="flex items-start gap-3">
+                        <div className="h-8 w-8 rounded-full bg-white/10 flex items-center justify-center text-sm font-medium text-white/70 shrink-0 mt-1 cursor-grab">
+                          {q.order}
+                        </div>
+                        <div className="flex-1 space-y-2">
                           <Input
-                            placeholder={`Option ${oi + 1}`}
-                            value={opt}
-                            onChange={(e) => updateOption(i, oi, e.target.value)}
+                            placeholder="Enter your question..."
+                            value={q.prompt}
+                            onChange={(e) =>
+                              updateQuestion(i, { prompt: e.target.value })
+                            }
                             required
                           />
-                          {(q.options?.length ?? 0) > 1 && (
-                            <Button type="button" variant="ghost" size="sm" onClick={() => removeOption(i, oi)}>
-                              &times;
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                      <Button type="button" variant="outline" size="sm" onClick={() => addOption(i)}>
-                        + Add Option
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Scale config */}
-                  {q.type === "SCALE" && (
-                    <div className="ml-11 grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Min</Label>
-                        <Input
-                          type="number"
-                          value={q.scaleConfig?.min ?? 1}
-                          onChange={(e) => updateQuestion(i, { scaleConfig: { ...q.scaleConfig!, min: Number(e.target.value) } })}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Max</Label>
-                        <Input
-                          type="number"
-                          value={q.scaleConfig?.max ?? 10}
-                          onChange={(e) => updateQuestion(i, { scaleConfig: { ...q.scaleConfig!, max: Number(e.target.value) } })}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Min Label</Label>
-                        <Input
-                          placeholder="e.g. No pain"
-                          value={q.scaleConfig?.minLabel ?? ""}
-                          onChange={(e) => updateQuestion(i, { scaleConfig: { ...q.scaleConfig!, minLabel: e.target.value } })}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Max Label</Label>
-                        <Input
-                          placeholder="e.g. Worst pain"
-                          value={q.scaleConfig?.maxLabel ?? ""}
-                          onChange={(e) => updateQuestion(i, { scaleConfig: { ...q.scaleConfig!, maxLabel: e.target.value } })}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Dependency config */}
-                  {i > 0 && (
-                    <div className="ml-11 space-y-2">
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={!!q.dependsOn}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              const prevQ = questions[i - 1];
-                              updateQuestion(i, {
-                                dependsOn: {
-                                  questionId: `order_${prevQ.order}`,
-                                  condition: "equals",
-                                  value: "",
-                                },
-                              });
-                            } else {
-                              const updated = [...questions];
-                              delete updated[i].dependsOn;
-                              setQuestions(updated);
-                            }
-                          }}
-                        />
-                        <span className="text-muted-foreground">Show conditionally based on another answer</span>
-                      </label>
-                      {q.dependsOn && (
-                        <div className="grid grid-cols-3 gap-2">
-                          <select
-                            className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={q.dependsOn.questionId}
-                            onChange={(e) =>
-                              updateQuestion(i, {
-                                dependsOn: { ...q.dependsOn!, questionId: e.target.value },
-                              })
-                            }
-                          >
-                            {questions.slice(0, i).map((pq, pi) => (
-                              <option key={pi} value={`order_${pq.order}`}>
-                                Q{pq.order}
+                          <div className="grid grid-cols-2 gap-2">
+                            <select
+                              className="rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white"
+                              value={q.type}
+                              onChange={(e) =>
+                                updateQuestion(i, { type: e.target.value })
+                              }
+                            >
+                              <option value="LONG_TEXT">Long Text</option>
+                              <option value="SHORT_TEXT">Short Text</option>
+                              <option value="MULTIPLE_CHOICE">
+                                Multiple Choice
                               </option>
-                            ))}
-                          </select>
-                          <select
-                            className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={q.dependsOn.condition}
-                            onChange={(e) =>
-                              updateQuestion(i, {
-                                dependsOn: { ...q.dependsOn!, condition: e.target.value as DependencyCondition },
-                              })
-                            }
+                              <option value="CHECKBOX">
+                                Checkbox (Multi-select)
+                              </option>
+                              <option value="SCALE">Number Scale</option>
+                            </select>
+                            <label className="flex items-center gap-2 text-sm text-white/70">
+                              <input
+                                type="checkbox"
+                                checked={q.required}
+                                onChange={(e) =>
+                                  updateQuestion(i, {
+                                    required: e.target.checked,
+                                  })
+                                }
+                              />
+                              Required
+                            </label>
+                          </div>
+                        </div>
+                        {questions.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeQuestion(i)}
+                            className="mt-1 text-white/50 hover:text-white"
                           >
-                            <option value="equals">equals</option>
-                            <option value="not_equals">not equals</option>
-                            <option value="includes">includes</option>
-                            <option value="not_includes">not includes</option>
-                            <option value="gte">greater or equal</option>
-                            <option value="lte">less or equal</option>
-                            <option value="between">between</option>
-                          </select>
-                          <Input
-                            placeholder="Value"
-                            value={String(q.dependsOn.value)}
-                            onChange={(e) =>
-                              updateQuestion(i, {
-                                dependsOn: { ...q.dependsOn!, value: e.target.value },
-                              })
-                            }
-                          />
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Options editor for MCQ / Checkbox */}
+                      {(q.type === "MULTIPLE_CHOICE" ||
+                        q.type === "CHECKBOX") && (
+                        <div className="ml-11 space-y-2">
+                          <Label className="text-xs text-white/50">
+                            Options
+                          </Label>
+                          {(q.options || []).map((opt, oi) => (
+                            <div key={oi} className="flex gap-2">
+                              <Input
+                                placeholder={`Option ${oi + 1}`}
+                                value={opt}
+                                onChange={(e) =>
+                                  updateOption(i, oi, e.target.value)
+                                }
+                                required
+                              />
+                              {(q.options?.length ?? 0) > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeOption(i, oi)}
+                                  className="text-white/50"
+                                >
+                                  &times;
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addOption(i)}
+                            className="border-white/10 text-white/70 hover:bg-white/10"
+                          >
+                            + Add Option
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Scale config */}
+                      {q.type === "SCALE" && (
+                        <div className="ml-11 grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-white/50">Min</Label>
+                            <Input
+                              type="number"
+                              value={q.scaleConfig?.min ?? 1}
+                              onChange={(e) =>
+                                updateQuestion(i, {
+                                  scaleConfig: {
+                                    ...q.scaleConfig!,
+                                    min: Number(e.target.value),
+                                  },
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-white/50">Max</Label>
+                            <Input
+                              type="number"
+                              value={q.scaleConfig?.max ?? 10}
+                              onChange={(e) =>
+                                updateQuestion(i, {
+                                  scaleConfig: {
+                                    ...q.scaleConfig!,
+                                    max: Number(e.target.value),
+                                  },
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-white/50">
+                              Min Label
+                            </Label>
+                            <Input
+                              placeholder="e.g. No pain"
+                              value={q.scaleConfig?.minLabel ?? ""}
+                              onChange={(e) =>
+                                updateQuestion(i, {
+                                  scaleConfig: {
+                                    ...q.scaleConfig!,
+                                    minLabel: e.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-white/50">
+                              Max Label
+                            </Label>
+                            <Input
+                              placeholder="e.g. Worst pain"
+                              value={q.scaleConfig?.maxLabel ?? ""}
+                              onChange={(e) =>
+                                updateQuestion(i, {
+                                  scaleConfig: {
+                                    ...q.scaleConfig!,
+                                    maxLabel: e.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Dependency config */}
+                      {i > 0 && (
+                        <div className="ml-11 space-y-2">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={!!q.dependsOn}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const prevQ = questions[i - 1];
+                                  updateQuestion(i, {
+                                    dependsOn: {
+                                      questionId: `order_${prevQ.order}`,
+                                      condition: "equals",
+                                      value: "",
+                                    },
+                                  });
+                                } else {
+                                  const updated = [...questions];
+                                  delete updated[i].dependsOn;
+                                  setQuestions(updated);
+                                }
+                              }}
+                            />
+                            <span className="text-white/50">
+                              Show conditionally based on another answer
+                            </span>
+                          </label>
+                          {q.dependsOn && (
+                            <div className="grid grid-cols-3 gap-2">
+                              <select
+                                className="rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white"
+                                value={q.dependsOn.questionId}
+                                onChange={(e) =>
+                                  updateQuestion(i, {
+                                    dependsOn: {
+                                      ...q.dependsOn!,
+                                      questionId: e.target.value,
+                                    },
+                                  })
+                                }
+                              >
+                                {questions.slice(0, i).map((pq, pi) => (
+                                  <option key={pi} value={`order_${pq.order}`}>
+                                    Q{pq.order}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                className="rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white"
+                                value={q.dependsOn.condition}
+                                onChange={(e) =>
+                                  updateQuestion(i, {
+                                    dependsOn: {
+                                      ...q.dependsOn!,
+                                      condition:
+                                        e.target.value as DependencyCondition,
+                                    },
+                                  })
+                                }
+                              >
+                                <option value="equals">equals</option>
+                                <option value="not_equals">not equals</option>
+                                <option value="includes">includes</option>
+                                <option value="not_includes">
+                                  not includes
+                                </option>
+                                <option value="gte">greater or equal</option>
+                                <option value="lte">less or equal</option>
+                                <option value="between">between</option>
+                              </select>
+                              <Input
+                                placeholder="Value"
+                                value={String(q.dependsOn.value)}
+                                onChange={(e) =>
+                                  updateQuestion(i, {
+                                    dependsOn: {
+                                      ...q.dependsOn!,
+                                      value: e.target.value,
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
 
-                {/* Inline specificity suggestion */}
-                {(() => {
-                  const spec = specificityResult?.suggestions.find(
-                    (s) => s.questionIndex === i && !acceptedSpecificity.has(s.questionIndex)
-                  );
-                  if (!spec) return null;
-                  return (
-                    <div
-                      id={`spec-${i}`}
-                      className="border-2 border-blue-400 bg-blue-50 rounded-lg p-4 space-y-2 ml-6"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="h-8 w-8 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center text-sm font-medium shrink-0 mt-1">
-                          !
-                        </div>
-                        <div className="flex-1 space-y-1">
-                          <span className="text-xs font-medium text-blue-700 bg-blue-200 px-2 py-0.5 rounded">
-                            Specificity Improvement
-                          </span>
-                          <p className="font-medium text-blue-900">&ldquo;{spec.suggestedPrompt}&rdquo;</p>
-                          {spec.suggestedType && spec.suggestedType !== q.type && (
-                            <p className="text-xs font-medium text-blue-800">
-                              Type: {q.type === "SCALE" ? "Number Scale" : q.type} &rarr; {spec.suggestedType === "SCALE" ? "Number Scale" : spec.suggestedType}
-                              {spec.suggestedConfig?.scale && (
-                                <span> ({spec.suggestedConfig.scale.min}-{spec.suggestedConfig.scale.max}{spec.suggestedConfig.scale.minLabel ? `, "${spec.suggestedConfig.scale.minLabel}" to "${spec.suggestedConfig.scale.maxLabel}"` : ""})</span>
-                              )}
-                            </p>
-                          )}
-                          {(!spec.suggestedType || spec.suggestedType === q.type) && spec.suggestedConfig?.scale && (
-                            <p className="text-xs font-medium text-blue-800">
-                              Scale: {q.scaleConfig?.min ?? 1}-{q.scaleConfig?.max ?? 10} &rarr; {spec.suggestedConfig.scale.min}-{spec.suggestedConfig.scale.max}
-                              {spec.suggestedConfig.scale.minLabel && (
-                                <span> (&ldquo;{spec.suggestedConfig.scale.minLabel}&rdquo; to &ldquo;{spec.suggestedConfig.scale.maxLabel}&rdquo;)</span>
-                              )}
-                            </p>
-                          )}
-                          <p className="text-xs text-blue-600">{spec.reason}</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 ml-11">
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="bg-blue-600 hover:bg-blue-500 text-white"
-                          onClick={() => acceptSpecificity(spec)}
-                        >
-                          Accept
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="text-blue-600"
-                          onClick={() => dismissSpecificity(spec.questionIndex)}
-                        >
-                          Skip
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })()}
+                    {/* Inline specificity suggestion — merge conflict style */}
+                    {(() => {
+                      const spec = specificityResult?.suggestions.find(
+                        (s) =>
+                          s.questionIndex === i &&
+                          !acceptedSpecificity.has(s.questionIndex)
+                      );
+                      if (!spec) return null;
 
-                {/* Inline recommendation card */}
-                {rec && (() => {
-                  const originalOrder = questions.findIndex((qq) => qq.prompt === rec.originalPrompt) + 1;
-                  const pairInfo = qualityResult?.reversePairs.find((_, pi) => pi === qualityResult?.recommendations.indexOf(rec));
-                  return (
-                  <div
-                    id={`rec-${i}`}
-                    className="border-2 border-violet-400 bg-violet-50 rounded-lg p-4 space-y-2 ml-6 animate-in fade-in slide-in-from-top-2"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="h-8 w-8 rounded-full bg-violet-200 text-violet-700 flex items-center justify-center text-sm font-medium shrink-0 mt-1">
-                        +
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-violet-700 bg-violet-200 px-2 py-0.5 rounded">
-                            Suggested Reverse Question
-                          </span>
+                      const typeLabel = (t: string) =>
+                        t === "SCALE" ? "Number Scale" : t === "MULTIPLE_CHOICE" ? "Multiple Choice" : t.replace(/_/g, " ");
+                      const hasTypeChange = spec.suggestedType && spec.suggestedType !== q.type;
+                      const hasScaleChange = spec.suggestedConfig?.scale;
+
+                      return (
+                        <div
+                          id={`spec-${i}`}
+                          className="rounded-lg overflow-hidden mt-2 border border-white/10"
+                        >
+                          {/* Header bar */}
+                          <div className="flex items-center justify-between px-4 py-2 bg-white/[0.04] border-b border-white/10">
+                            <span className="text-xs font-medium text-white/50 uppercase tracking-wider">
+                              Specificity Improvement
+                            </span>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-7 px-3 text-xs bg-[#2874a6] hover:bg-[#3498db] text-white"
+                                onClick={() => acceptSpecificity(spec)}
+                              >
+                                Accept
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-3 text-xs text-white/40 hover:text-white"
+                                onClick={() =>
+                                  dismissSpecificity(spec.questionIndex)
+                                }
+                              >
+                                Skip
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Side-by-side diff — aligned rows */}
+                          {(() => {
+                            const suggestedType = spec.suggestedType || q.type;
+                            const curScale = q.type === "SCALE" ? q.scaleConfig : null;
+                            const sugScale = hasScaleChange ? spec.suggestedConfig!.scale! : (suggestedType === "SCALE" ? curScale : null);
+                            const showType = hasTypeChange || q.type !== "LONG_TEXT";
+                            const showRange = curScale || sugScale;
+                            const showLabels = curScale?.minLabel || sugScale?.minLabel;
+
+                            const redPill = (text: string | null) =>
+                              text ? (
+                                <span className="inline-flex items-center rounded-full bg-red-500/10 border border-red-500/20 px-2.5 py-1 text-[11px] text-red-300/70">
+                                  {text}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full bg-white/[0.03] border border-white/[0.06] px-2.5 py-1 text-[11px] text-white/20 italic">
+                                  &mdash;
+                                </span>
+                              );
+
+                            const bluePill = (text: string | null) =>
+                              text ? (
+                                <span className="inline-flex items-center rounded-full bg-[#2874a6]/15 border border-[#3498db]/20 px-2.5 py-1 text-[11px] text-[#85c1e9]/80">
+                                  {text}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full bg-white/[0.03] border border-white/[0.06] px-2.5 py-1 text-[11px] text-white/20 italic">
+                                  &mdash;
+                                </span>
+                              );
+
+                            return (
+                              <div className="grid grid-cols-2 divide-x divide-white/10">
+                                {/* Headers */}
+                                <div className="bg-red-500/[0.06] px-4 pt-3 pb-1">
+                                  <span className="text-[10px] font-medium text-red-400/80 uppercase tracking-wider">Current</span>
+                                </div>
+                                <div className="bg-[#2874a6]/[0.06] px-4 pt-3 pb-1">
+                                  <span className="text-[10px] font-medium text-[#5dade2]/80 uppercase tracking-wider">Suggested</span>
+                                </div>
+
+                                {/* Row 1: Prompt */}
+                                <div className="bg-red-500/[0.06] px-4 py-2">
+                                  <p className="text-sm text-red-200/90 leading-relaxed bg-red-950/40 rounded-md px-3 py-2 border-l-2 border-red-500/40">
+                                    {spec.originalPrompt}
+                                  </p>
+                                </div>
+                                <div className="bg-[#2874a6]/[0.06] px-4 py-2">
+                                  <p className="text-sm text-[#aed6f1] leading-relaxed bg-[#1a3d5c]/50 rounded-md px-3 py-2 border-l-2 border-[#3498db]/60">
+                                    {spec.suggestedPrompt}
+                                  </p>
+                                </div>
+
+                                {/* Row 2: Type */}
+                                {showType && (
+                                  <>
+                                    <div className="bg-red-500/[0.06] px-4 py-1.5">
+                                      {redPill(typeLabel(q.type))}
+                                    </div>
+                                    <div className="bg-[#2874a6]/[0.06] px-4 py-1.5">
+                                      {bluePill(typeLabel(suggestedType))}
+                                    </div>
+                                  </>
+                                )}
+
+                                {/* Row 3: Scale range */}
+                                {showRange && (
+                                  <>
+                                    <div className="bg-red-500/[0.06] px-4 py-1.5">
+                                      {redPill(curScale ? `${curScale.min} \u2013 ${curScale.max}` : null)}
+                                    </div>
+                                    <div className="bg-[#2874a6]/[0.06] px-4 py-1.5">
+                                      {bluePill(sugScale ? `${sugScale.min} \u2013 ${sugScale.max}` : null)}
+                                    </div>
+                                  </>
+                                )}
+
+                                {/* Row 4: Labels */}
+                                {showLabels && (
+                                  <>
+                                    <div className="bg-red-500/[0.06] px-4 pt-1.5 pb-3">
+                                      {redPill(curScale?.minLabel ? `${curScale.minLabel} \u2192 ${curScale.maxLabel}` : null)}
+                                    </div>
+                                    <div className="bg-[#2874a6]/[0.06] px-4 pt-1.5 pb-3">
+                                      {bluePill(sugScale?.minLabel ? `${sugScale.minLabel} \u2192 ${sugScale.maxLabel}` : null)}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Reason footer */}
+                          <div className="px-4 py-2 bg-white/[0.02] border-t border-white/10">
+                            <p className="text-xs text-white/40 italic">
+                              {spec.reason}
+                            </p>
+                          </div>
                         </div>
-                        <p className="font-medium text-violet-900">&ldquo;{rec.reversePrompt}&rdquo;</p>
-                        <p className="text-xs text-violet-600">{rec.explanation}</p>
-                        {pairInfo && (
-                          <p className="text-xs text-violet-700">
-                            <span className="font-medium">Construct:</span> {pairInfo.construct} &mdash; {pairInfo.relationship}
-                          </p>
-                        )}
-                        <p className="text-xs text-violet-500 italic">
-                          If accepted, this will be inserted at position {rec.suggestedOrder} (away from Q{originalOrder}) &mdash; reverse questions work best when separated from the original.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 ml-11">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="bg-violet-600 hover:bg-violet-500 text-white"
-                        onClick={() => {
-                          acceptRecommendation(rec);
-                          // Scroll to next recommendation
-                          const nextRec = qualityResult?.recommendations.find(
-                            (r) => r.originalPrompt !== rec.originalPrompt && !acceptedRecs.has(r.originalPrompt)
-                          );
-                          if (nextRec) {
-                            const nextIdx = questions.findIndex((qq) => qq.prompt === nextRec.originalPrompt);
-                            if (nextIdx >= 0) {
-                              setTimeout(() => {
-                                document.getElementById(`rec-${nextIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-                              }, 100);
-                            }
-                          }
-                        }}
-                      >
-                        Accept
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="text-violet-600"
-                        onClick={() => {
-                          dismissRecommendation(rec.originalPrompt);
-                          // Scroll to next recommendation
-                          const nextRec = qualityResult?.recommendations.find(
-                            (r) => r.originalPrompt !== rec.originalPrompt && !acceptedRecs.has(r.originalPrompt)
-                          );
-                          if (nextRec) {
-                            const nextIdx = questions.findIndex((qq) => qq.prompt === nextRec.originalPrompt);
-                            if (nextIdx >= 0) {
-                              setTimeout(() => {
-                                document.getElementById(`rec-${nextIdx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-                              }, 100);
-                            }
-                          }
-                        }}
-                      >
-                        Skip
-                      </Button>
-                    </div>
+                      );
+                    })()}
+
+                    {/* Inline reverse recommendation */}
+                    {rec &&
+                      (() => {
+                        const originalOrder =
+                          questions.findIndex(
+                            (qq) => qq.prompt === rec.originalPrompt
+                          ) + 1;
+                        return (
+                          <div
+                            id={`rec-${i}`}
+                            className="border border-[#5dade2]/30 bg-[#1a5276]/20 rounded-lg p-4 space-y-2 ml-6 mt-2"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="h-8 w-8 rounded-full bg-[#1a5276]/40 text-[#5dade2] flex items-center justify-center text-sm font-medium shrink-0 mt-1">
+                                +
+                              </div>
+                              <div className="flex-1 space-y-1">
+                                <span className="text-xs font-medium text-[#5dade2] bg-[#1a5276]/30 px-2 py-0.5 rounded">
+                                  Suggested Reverse Question
+                                </span>
+                                <p className="font-medium text-white">
+                                  &ldquo;{rec.reversePrompt}&rdquo;
+                                </p>
+                                <p className="text-xs text-white/60">
+                                  {rec.explanation}
+                                </p>
+                                <p className="text-xs text-white/40 italic">
+                                  This question checks consistency with Q
+                                  {originalOrder} (&ldquo;
+                                  {rec.originalPrompt}&rdquo;). Placed here
+                                  intentionally — reverse questions work best
+                                  when separated from the original.
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 ml-11">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="bg-[#2874a6] hover:bg-[#3498db] text-white"
+                                onClick={() => {
+                                  acceptRecommendation(rec);
+                                  const nextRec =
+                                    qualityResult?.recommendations.find(
+                                      (r) =>
+                                        r.originalPrompt !==
+                                          rec.originalPrompt &&
+                                        !acceptedRecs.has(r.originalPrompt)
+                                    );
+                                  if (nextRec) {
+                                    const nextIdx = questions.findIndex(
+                                      (qq) =>
+                                        qq.order === nextRec.suggestedOrder
+                                    );
+                                    if (nextIdx >= 0) {
+                                      setTimeout(() => {
+                                        document
+                                          .getElementById(`rec-${nextIdx}`)
+                                          ?.scrollIntoView({
+                                            behavior: "smooth",
+                                            block: "center",
+                                          });
+                                      }, 100);
+                                    }
+                                  }
+                                }}
+                              >
+                                Accept
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="text-[#5dade2] hover:text-white"
+                                onClick={() => {
+                                  dismissRecommendation(rec.originalPrompt);
+                                  const nextRec =
+                                    qualityResult?.recommendations.find(
+                                      (r) =>
+                                        r.originalPrompt !==
+                                          rec.originalPrompt &&
+                                        !acceptedRecs.has(r.originalPrompt)
+                                    );
+                                  if (nextRec) {
+                                    const nextIdx = questions.findIndex(
+                                      (qq) =>
+                                        qq.order === nextRec.suggestedOrder
+                                    );
+                                    if (nextIdx >= 0) {
+                                      setTimeout(() => {
+                                        document
+                                          .getElementById(`rec-${nextIdx}`)
+                                          ?.scrollIntoView({
+                                            behavior: "smooth",
+                                            block: "center",
+                                          });
+                                      }, 100);
+                                    }
+                                  }
+                                }}
+                              >
+                                Skip
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                   </div>
-                  );
-                })()}
-                </div>
                 );
               })}
-              <Button type="button" variant="outline" onClick={addQuestion} className="w-full">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addQuestion}
+                className="w-full border-white/10 text-white/70 hover:bg-white/10"
+              >
                 + Add Question
               </Button>
             </CardContent>
@@ -870,66 +1113,113 @@ export default function NewStudyPage() {
               {/* Specificity bar */}
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className={`font-medium ${analysisPhase === "specificity" ? "text-blue-700" : analysisPhase === "creating" ? "text-muted-foreground" : "text-green-700"}`}>
-                    {analysisPhase === "creating" ? "Creating study..." : analysisPhase === "specificity" ? "Checking question specificity..." : "Specificity check complete"}
+                  <span
+                    className={`font-medium ${
+                      analysisPhase === "specificity"
+                        ? "text-[#5dade2]"
+                        : analysisPhase === "creating"
+                          ? "text-white/50"
+                          : "text-emerald-400"
+                    }`}
+                  >
+                    {analysisPhase === "creating"
+                      ? "Creating study..."
+                      : analysisPhase === "specificity"
+                        ? "Checking question specificity..."
+                        : "Specificity check complete"}
                   </span>
-                  {(analysisPhase === "creating" || analysisPhase === "specificity") && (
-                    <span className="text-muted-foreground">{analysisProgress}%</span>
+                  {(analysisPhase === "creating" ||
+                    analysisPhase === "specificity") && (
+                    <span className="text-white/50">{analysisProgress}%</span>
                   )}
                 </div>
-                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
-                      analysisPhase === "creating" || analysisPhase === "specificity" ? "bg-blue-500" : "bg-green-500"
+                      analysisPhase === "creating" ||
+                      analysisPhase === "specificity"
+                        ? "bg-[#3498db]"
+                        : "bg-emerald-500"
                     }`}
-                    style={{ width: `${analysisPhase === "creating" || analysisPhase === "specificity" ? analysisProgress : 100}%` }}
+                    style={{
+                      width: `${
+                        analysisPhase === "creating" ||
+                        analysisPhase === "specificity"
+                          ? analysisProgress
+                          : 100
+                      }%`,
+                    }}
                   />
                 </div>
               </div>
 
-              {/* Reverse bar — only visible after specificity */}
-              {(analysisPhase === "reverse" || (analysisPhase === "done" && qualityResult)) && (
+              {/* Reverse bar */}
+              {(analysisPhase === "reverse" ||
+                (analysisPhase === "done" && qualityResult)) && (
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span className={`font-medium ${analysisPhase === "reverse" ? "text-violet-700" : "text-green-700"}`}>
-                      {analysisPhase === "reverse" ? "Checking for reverse-score recommendations..." : "Reverse-score check complete"}
+                    <span
+                      className={`font-medium ${
+                        analysisPhase === "reverse"
+                          ? "text-[#5dade2]"
+                          : "text-emerald-400"
+                      }`}
+                    >
+                      {analysisPhase === "reverse"
+                        ? "Checking for reverse-score recommendations..."
+                        : "Reverse-score check complete"}
                     </span>
                     {analysisPhase === "reverse" && (
-                      <span className="text-muted-foreground">{analysisProgress}%</span>
+                      <span className="text-white/50">
+                        {analysisProgress}%
+                      </span>
                     )}
                   </div>
-                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-300 ${
-                        analysisPhase === "reverse" ? "bg-violet-500" : "bg-green-500"
+                        analysisPhase === "reverse"
+                          ? "bg-[#3498db]"
+                          : "bg-emerald-500"
                       }`}
-                      style={{ width: `${analysisPhase === "reverse" ? analysisProgress : 100}%` }}
+                      style={{
+                        width: `${
+                          analysisPhase === "reverse"
+                            ? analysisProgress
+                            : 100
+                        }%`,
+                      }}
                     />
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <Button type="submit" size="lg" className="w-full" disabled={!!qualityResult || !!specificityResult}>
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full bg-[#2874a6] hover:bg-[#3498db] text-white"
+              disabled={!!qualityResult || !!specificityResult}
+            >
               Create Study
             </Button>
           )}
         </form>
 
-        {/* Confirm & finalize */}
+        {/* Quality summary + continue */}
         {qualityResult && createdStudyId && (
-          <Card id="quality-summary" className="border-2 border-emerald-300 bg-emerald-50">
-            <CardContent className="py-6 space-y-3">
-              <div className="text-center space-y-1">
-                <p className="font-medium text-emerald-900">Ready to finalize your survey</p>
-                <p className="text-sm text-emerald-700">Once confirmed, the survey questions cannot be edited. Review your questions above before proceeding.</p>
-              </div>
+          <Card id="quality-summary" className="mt-6">
+            <CardContent className="py-4">
+              <p className="text-sm text-white/60 mb-3">
+                {qualityResult.message}
+              </p>
               <Button
-                onClick={() => router.push(`/dashboard/studies/${createdStudyId}`)}
-                size="lg"
-                className="w-full bg-emerald-600 hover:bg-emerald-500"
+                onClick={() =>
+                  router.push(`/dashboard/studies/${createdStudyId}`)
+                }
+                className="w-full bg-[#2874a6] hover:bg-[#3498db] text-white"
               >
-                Confirm &amp; Finalize Survey
+                Continue to Study
               </Button>
             </CardContent>
           </Card>

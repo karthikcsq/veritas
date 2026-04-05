@@ -116,13 +116,13 @@ const BAR_COLORS = [
 
 function qualityColor(q: number | null) {
   if (q === null) return "text-muted-foreground";
-  if (q >= 0.7) return "text-emerald-600";
-  if (q >= 0.5) return "text-amber-600";
-  return "text-rose-600";
+  if (q >= 0.7) return "text-emerald-400";
+  if (q >= 0.5) return "text-amber-400";
+  return "text-rose-400";
 }
 
 function qualityBar(q: number | null) {
-  if (q === null) return "bg-slate-200";
+  if (q === null) return "bg-white/10";
   if (q >= 0.7) return "bg-emerald-500";
   if (q >= 0.5) return "bg-amber-400";
   return "bg-rose-500";
@@ -138,7 +138,7 @@ export function GeographicTab() {
     <div className="space-y-8">
       <div className="grid grid-cols-3 gap-8">
         {/* Horizontal bar chart */}
-        <Card className="col-span-2 border-0 shadow-sm ring-1 ring-slate-200">
+        <Card className="col-span-2 border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="px-6 pt-6">
             <CardTitle className="text-lg">Responses by Country</CardTitle>
             <CardDescription>
@@ -179,7 +179,7 @@ export function GeographicTab() {
         </Card>
 
         {/* Quality by country */}
-        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <Card className="border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="px-6 pt-6">
             <CardTitle className="text-lg">Avg Quality by Country</CardTitle>
             <CardDescription>Ranked high → low</CardDescription>
@@ -196,7 +196,7 @@ export function GeographicTab() {
                     {c.avgQuality?.toFixed(2)}
                   </span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
                   <div
                     className={`h-full rounded-full ${qualityBar(c.avgQuality)}`}
                     style={{ width: `${(c.avgQuality ?? 0) * 100}%` }}
@@ -213,7 +213,7 @@ export function GeographicTab() {
         {sorted.map((c) => (
           <Card
             key={c.code}
-            className="border-0 shadow-sm ring-1 ring-slate-200 transition-shadow hover:shadow-md hover:ring-violet-200"
+            className="border-0 shadow-sm ring-1 ring-white/10 transition-shadow hover:shadow-md hover:ring-[#2874a6]/30"
           >
             <CardContent className="pb-6 pt-6">
               <div className="mb-2 text-4xl">{c.flag}</div>
@@ -223,7 +223,7 @@ export function GeographicTab() {
                 {c.pct}% of total
               </div>
               {c.flagged > 0 && (
-                <div className="mt-1 text-xs text-rose-600">
+                <div className="mt-1 text-xs text-rose-400">
                   {c.flagged} flagged
                 </div>
               )}
@@ -243,7 +243,7 @@ export function GeographicTab() {
       </div>
 
       {/* Insight callout */}
-      <Card className="border-0 ring-2 ring-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50">
+      <Card className="border-0 ring-1 ring-amber-500/30 bg-amber-500/10">
         <CardContent className="py-4">
           <div className="flex items-start gap-3 text-sm">
             <span className="text-xl">💡</span>
