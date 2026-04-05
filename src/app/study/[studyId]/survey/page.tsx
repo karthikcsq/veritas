@@ -477,11 +477,11 @@ export default function SurveyPage() {
           const isDependent = !!question.dependsOn;
 
           return (
-            <div key={question.id} className="flex items-start gap-3">
+            <div key={question.id} className="relative">
             <Card
-              className={`flex-1 ${
+              className={
                 isDependent ? "ml-4 border-l-2 border-l-[#3498db]/30" : ""
-              }`}
+              }
             >
               <CardHeader>
                 <CardTitle className="text-lg text-white">
@@ -638,19 +638,24 @@ export default function SurveyPage() {
               </CardContent>
             </Card>
             {currentValidity && !currentValidity.dismissed && (
-              <div className="w-[220px] shrink-0 self-center">
-                <div className="relative bg-amber-500/10 backdrop-blur-sm border border-amber-500/25 rounded-xl rounded-tl-none px-3 py-2.5 text-xs text-amber-200 shadow-lg">
-                  <div className="absolute -left-1.5 top-4 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[6px] border-r-amber-500/25" />
-                  <p className="font-medium leading-snug">
+              <div
+                className="absolute left-full top-1/2 ml-4 w-[220px] z-20"
+                style={{ animation: "bubbleSlideIn 0.4s ease-out forwards" }}
+              >
+                <div className="relative bg-amber-950/80 backdrop-blur-md border border-amber-500/20 rounded-2xl rounded-tl-sm px-4 py-3 text-xs text-amber-100 shadow-xl shadow-amber-900/20">
+                  {/* Arrow pointing left */}
+                  <div className="absolute -left-[7px] top-5 w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-r-[7px] border-r-amber-950/80" />
+                  <div className="absolute -left-[6px] top-[21px] w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[6px] border-r-amber-950/80" />
+                  <p className="font-medium leading-relaxed">
                     {currentValidity.score < 20
                       ? "Hmm, this doesn't seem related to the question. Mind taking another look?"
                       : "Heads up: your answer might not fully cover what's being asked."}
                   </p>
-                  <p className="mt-1.5 text-amber-300/60 leading-snug">
+                  <p className="mt-2 text-amber-300/50 leading-relaxed">
                     {currentValidity.explanation}
                   </p>
                   <button
-                    className="mt-2 text-[10px] text-amber-400/70 hover:text-amber-300 underline underline-offset-2"
+                    className="mt-2.5 text-[11px] text-amber-400/60 hover:text-amber-300 transition-colors"
                     onClick={() => dismissWarning(question.id)}
                   >
                     Dismiss
