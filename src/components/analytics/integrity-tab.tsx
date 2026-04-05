@@ -57,7 +57,7 @@ function ScoreBar({
 
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
         <div
           className={`h-full rounded-full transition-all ${color}`}
           style={{ width: `${pct}%` }}
@@ -118,16 +118,16 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-4 gap-6">
-        <Card className="border-0 shadow-sm ring-2 ring-rose-200 bg-linear-to-br from-rose-50 to-red-50">
+        <Card className="border-0 shadow-sm ring-1 ring-rose-500/30 bg-linear-to-br from-rose-950/30 to-red-950/20">
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
-              <div className="text-4xl font-bold text-rose-600 tabular-nums">
+              <div className="text-4xl font-bold text-rose-400 tabular-nums">
                 {flaggedList.length}
               </div>
-              <div className="mt-1 text-sm font-semibold text-rose-700/80">
+              <div className="mt-1 text-sm font-semibold text-rose-300/80">
                 Flagged Responses
               </div>
-              <div className="mt-1 text-xs text-rose-600/60">
+              <div className="mt-1 text-xs text-rose-400/60">
                 {enrollments.length > 0
                   ? `${((flaggedList.length / enrollments.length) * 100).toFixed(1)}% of total`
                   : "no data"}
@@ -139,16 +139,16 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm ring-2 ring-orange-200 bg-linear-to-br from-orange-50 to-amber-50">
+        <Card className="border-0 shadow-sm ring-1 ring-orange-500/30 bg-linear-to-br from-orange-950/30 to-amber-950/20">
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
-              <div className="text-4xl font-bold text-orange-600 tabular-nums">
+              <div className="text-4xl font-bold text-orange-400 tabular-nums">
                 {lowSimilarity.length}
               </div>
-              <div className="mt-1 text-sm font-semibold text-orange-700/80">
+              <div className="mt-1 text-sm font-semibold text-orange-300/80">
                 Low Similarity
               </div>
-              <div className="mt-1 text-xs text-orange-600/60">
+              <div className="mt-1 text-xs text-orange-400/60">
                 Atypical vs. peers
               </div>
             </div>
@@ -158,16 +158,16 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm ring-2 ring-amber-200 bg-linear-to-br from-amber-50 to-yellow-50">
+        <Card className="border-0 shadow-sm ring-1 ring-amber-500/30 bg-linear-to-br from-amber-950/30 to-yellow-950/20">
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
-              <div className="text-4xl font-bold text-amber-600 tabular-nums">
+              <div className="text-4xl font-bold text-amber-400 tabular-nums">
                 {enrollments.filter((e) => e.status === "IN_PROGRESS").length}
               </div>
-              <div className="mt-1 text-sm font-semibold text-amber-700/80">
+              <div className="mt-1 text-sm font-semibold text-amber-300/80">
                 In Progress
               </div>
-              <div className="mt-1 text-xs text-amber-600/60">
+              <div className="mt-1 text-xs text-amber-400/60">
                 Not yet scored
               </div>
             </div>
@@ -177,16 +177,16 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm ring-2 ring-emerald-200 bg-linear-to-br from-emerald-50 to-green-50">
+        <Card className="border-0 shadow-sm ring-1 ring-emerald-500/30 bg-linear-to-br from-emerald-950/30 to-green-950/20">
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
-              <div className="text-4xl font-bold text-emerald-600 tabular-nums">
+              <div className="text-4xl font-bold text-emerald-400 tabular-nums">
                 {valid.length}
               </div>
-              <div className="mt-1 text-sm font-semibold text-emerald-700/80">
+              <div className="mt-1 text-sm font-semibold text-emerald-300/80">
                 Valid Responses
               </div>
-              <div className="mt-1 text-xs text-emerald-600/60">
+              <div className="mt-1 text-xs text-emerald-400/60">
                 Passed all checks
               </div>
             </div>
@@ -197,7 +197,7 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
         </Card>
       </div>
 
-      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+      <Card className="border-0 shadow-sm ring-1 ring-white/10">
         <CardHeader className="flex flex-row items-start justify-between px-6 pt-6">
           <div>
             <CardTitle className="text-lg">Participant Integrity Scores</CardTitle>
@@ -238,8 +238,8 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
                   onClick={() => e.responses.length > 0 && setSelected(e)}
                   className={`grid grid-cols-[160px_120px_1fr_1fr_80px] items-center gap-4 border-b px-3 py-4 text-sm last:border-0 transition-colors ${
                     e.flagged || e.status === "FLAGGED"
-                      ? "bg-rose-50/60 hover:bg-rose-50"
-                      : "hover:bg-slate-50"
+                      ? "bg-rose-500/10 hover:bg-rose-500/15"
+                      : "hover:bg-white/5"
                   } ${e.responses.length > 0 ? "cursor-pointer" : ""}`}
                 >
                   <div className="font-mono text-xs text-muted-foreground truncate">
@@ -289,7 +289,7 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
       </Card>
 
       {selected && (
-        <Card className="border-0 shadow-sm ring-2 ring-violet-200 bg-linear-to-br from-violet-50/40 to-purple-50/40">
+        <Card className="border-0 shadow-sm ring-1 ring-violet-500/30 bg-linear-to-br from-violet-950/30 to-purple-950/20">
           <CardHeader className="flex flex-row items-start justify-between px-6 pt-6 pb-4">
             <div>
               <CardTitle>Response Inspection</CardTitle>
@@ -329,7 +329,7 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {r.questionPrompt}
                 </div>
-                <div className="rounded-xl border-2 border-slate-200 bg-white p-4 shadow-sm">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm">
                   <div className="mb-1.5 flex items-center gap-2">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                       Response
@@ -345,11 +345,11 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
               </div>
             ))}
             {selected.similarityReason && (
-              <div className="rounded-xl border-2 border-rose-200 bg-rose-50/50 p-4">
-                <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-rose-600">
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4">
+                <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-rose-400">
                   Similarity Flag
                 </div>
-                <p className="text-sm leading-relaxed text-rose-800">{selected.similarityReason}</p>
+                <p className="text-sm leading-relaxed text-rose-300">{selected.similarityReason}</p>
               </div>
             )}
           </CardContent>
