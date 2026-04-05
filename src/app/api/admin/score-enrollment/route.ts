@@ -3,11 +3,10 @@ import { pool } from "@/lib/db";
 import { triggerScoringPipeline } from "@/lib/scorer";
 
 export async function POST(req: Request) {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not available in production" }, { status: 403 });
+  const { enrollmentId, adminKey } = (await req.json()) as { enrollmentId: string; adminKey?: string };
+  if (adminKey !== process.env.NEXTAUTH_SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
-
-  const { enrollmentId } = (await req.json()) as { enrollmentId: string };
   if (!enrollmentId) {
     return NextResponse.json({ error: "enrollmentId required" }, { status: 400 });
   }
