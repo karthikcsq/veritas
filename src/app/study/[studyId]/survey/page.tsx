@@ -295,6 +295,7 @@ export default function SurveyPage() {
       );
 
       if (res.ok) {
+        localStorage.removeItem(`veritas_enrollment_${studyId}`);
         setSubmitted(true);
       } else if (res.status === 404) {
         // Enrollment was deleted or invalid — clear stale data and redirect
