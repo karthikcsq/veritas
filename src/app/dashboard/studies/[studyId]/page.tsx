@@ -58,8 +58,8 @@ const STATS = [
     value: "0.76",
     sub: "+0.04 this week",
     icon: Star,
-    color: "text-violet-300",
-    bg: "bg-violet-500/20",
+    color: "text-[#5dade2]",
+    bg: "bg-[#2874a6]/20",
   },
 ];
 
@@ -74,12 +74,19 @@ const TABS = [
 
 export default function StudyDetailPage() {
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Tabs defaultValue="overview" className="flex-col">
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Ambient glow blobs for glass effect */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="ambient-blob-1 absolute -top-60 -left-60 h-[800px] w-[800px] rounded-full bg-[#1a5276]/20 blur-[150px]" />
+        <div className="ambient-blob-2 absolute top-1/4 -right-40 h-[700px] w-[700px] rounded-full bg-[#2874a6]/15 blur-[130px]" />
+        <div className="ambient-blob-3 absolute -bottom-60 left-1/4 h-[700px] w-[700px] rounded-full bg-[#1b4f72]/12 blur-[130px]" />
+        <div className="ambient-blob-2 absolute top-2/3 left-1/2 h-[500px] w-[500px] rounded-full bg-[#21618c]/10 blur-[120px]" />
+      </div>
+      <Tabs defaultValue="overview" className="flex-col relative z-[1]">
         {/* ── Sticky top nav block ─────────────────────────────────── */}
         <div className="sticky top-0 z-50">
           {/* Gradient header */}
-          <div className="bg-gradient-to-r from-slate-900 via-violet-950 to-slate-900">
+          <div className="bg-gradient-to-r from-slate-900 via-[#1a3d5c] to-slate-900">
             <div className="mx-auto max-w-7xl px-6">
               {/* Row 1: back + title + actions */}
               <div className="flex items-center justify-between py-4">
@@ -124,7 +131,7 @@ export default function StudyDetailPage() {
                   </Button>
                   <Button
                     size="sm"
-                    className="gap-1.5 bg-violet-500 text-white hover:bg-violet-400"
+                    className="gap-1.5 bg-[#2874a6] text-white hover:bg-[#3498db]"
                   >
                     <Share2 className="h-3.5 w-3.5" />
                     Share
@@ -165,7 +172,7 @@ export default function StudyDetailPage() {
           </div>
 
           {/* Tab bar */}
-          <div className="border-b bg-white shadow-sm">
+          <div className="border-b border-white/10 bg-white/[0.03] backdrop-blur-xl">
             <div className="mx-auto max-w-7xl px-6">
               <TabsList
                 variant="line"
@@ -175,7 +182,7 @@ export default function StudyDetailPage() {
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className="h-auto rounded-none border-b-2 border-transparent px-5 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-active:border-violet-600 data-active:text-violet-700"
+                    className="h-auto rounded-none border-b-2 border-transparent px-5 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-active:border-[#3498db] data-active:text-[#5dade2]"
                   >
                     {tab.label}
                   </TabsTrigger>

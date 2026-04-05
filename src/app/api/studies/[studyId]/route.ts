@@ -26,7 +26,7 @@ export async function GET(
 
   // Fetch questions
   const questionsResult = await pool.query(
-    'SELECT "id", "order", "type", "prompt", "options" FROM "Question" WHERE "studyId" = $1 ORDER BY "order" ASC',
+    'SELECT "id", "order", "type", "prompt", "options", "required", "config", "dependsOn" FROM "Question" WHERE "studyId" = $1 ORDER BY "order" ASC',
     [studyId]
   );
 

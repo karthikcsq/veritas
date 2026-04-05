@@ -1,6 +1,28 @@
 export type StudyStatus = "DRAFT" | "ACTIVE" | "CLOSED";
-export type QuestionType = "SHORT_TEXT" | "LONG_TEXT" | "MULTIPLE_CHOICE" | "SCALE";
+export type QuestionType = "SHORT_TEXT" | "LONG_TEXT" | "MULTIPLE_CHOICE" | "CHECKBOX" | "SCALE";
 export type EnrollmentStatus = "VERIFIED" | "IN_PROGRESS" | "COMPLETED" | "FLAGGED";
+
+// ---- Dependencies ----
+export type DependencyCondition = "equals" | "not_equals" | "includes" | "not_includes" | "gte" | "lte" | "between";
+
+export interface QuestionDependency {
+  questionId: string;
+  condition: DependencyCondition;
+  value: string | string[] | number | [number, number];
+}
+
+// ---- Question Config ----
+export interface ScaleConfig {
+  min: number;
+  max: number;
+  step?: number;
+  minLabel?: string;
+  maxLabel?: string;
+}
+
+export interface QuestionConfig {
+  scale?: ScaleConfig;
+}
 
 // ---- Auth ----
 export interface RegisterRequest {
@@ -28,11 +50,15 @@ export interface CreateStudyRequest {
   description: string;
   targetCount: number;
   compensationUsd: number;
+  publiclyListed?: boolean;
   questions: Array<{
     order: number;
     type: QuestionType;
     prompt: string;
     options?: string[];
+    required?: boolean;
+    config?: QuestionConfig;
+    dependsOn?: QuestionDependency;
   }>;
 }
 
@@ -59,6 +85,9 @@ export interface StudyDetail {
     type: QuestionType;
     prompt: string;
     options: unknown;
+    required: boolean;
+    config: QuestionConfig | null;
+    dependsOn: QuestionDependency | null;
   }>;
   enrollments: Array<{
     id: string;
@@ -80,7 +109,41 @@ export interface SubmitResponsesRequest {
     questionId: string;
     value: string;
     timeSpentMs: number;
+    validityScore?: number;
   }>;
+}
+
+// ---- Validity ----
+export interface ValidateResponseRequest {
+  question: string;
+  answer: string;
+  questionType: QuestionType;
+}
+
+export interface ValidateResponseResponse {
+  score: number;
+  explanation: string;
+  missedParts: string[];
+}
+
+// ---- Contradictions ----
+export interface CheckContradictionsRequest {
+  responses: Array<{
+    question: string;
+    answer: string;
+  }>;
+}
+
+export interface CheckContradictionsResponse {
+  score: number;
+  contradictions: Array<{
+    questionA: string;
+    answerA: string;
+    questionB: string;
+    answerB: string;
+    explanation: string;
+  }>;
+  summary: string;
 }
 
 // ---- Dashboard ----

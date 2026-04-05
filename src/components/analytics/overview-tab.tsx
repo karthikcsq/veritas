@@ -95,7 +95,7 @@ export function OverviewTab() {
     <div className="space-y-8">
       <div className="grid grid-cols-3 gap-8">
         {/* Donut chart */}
-        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <Card className="border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="pb-2 pt-6 px-6">
             <CardTitle className="text-lg">Quality Distribution</CardTitle>
             <CardDescription>Across all scored responses</CardDescription>
@@ -140,7 +140,7 @@ export function OverviewTab() {
         </Card>
 
         {/* Enrollment trend */}
-        <Card className="col-span-2 border-0 shadow-sm ring-1 ring-slate-200">
+        <Card className="col-span-2 border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="pb-2 pt-6 px-6">
             <CardTitle className="text-lg">Enrollment & Completion Trend</CardTitle>
             <CardDescription>Cumulative over study period</CardDescription>
@@ -198,7 +198,7 @@ export function OverviewTab() {
       </div>
 
       {/* Dimension score gauges */}
-      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+      <Card className="border-0 shadow-sm ring-1 ring-white/10">
         <CardHeader className="pb-2 pt-6 px-6">
           <CardTitle className="text-lg">Average Quality Dimensions</CardTitle>
           <CardDescription>
@@ -216,8 +216,8 @@ export function OverviewTab() {
               />
             ))}
           </div>
-          <div className="mt-2 rounded-xl border border-violet-100 bg-violet-50/60 px-5 py-4 text-sm text-muted-foreground">
-            <strong className="text-violet-700">Interpretation:</strong>{" "}
+          <div className="mt-2 rounded-xl border border-[#2874a6]/20 bg-[#2874a6]/10 px-5 py-4 text-sm text-muted-foreground">
+            <strong className="text-[#3498db]">Interpretation:</strong>{" "}
             Consistency leads at 81 — participants are largely coherent within
             their own responses. Effort (68) is the lowest dimension, suggesting
             some participants provided minimal engagement with open-ended prompts.

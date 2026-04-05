@@ -9,7 +9,7 @@
 Read the four descriptions below and claim the one that fits your skills and interests. Once all four are claimed, jump to Section 8 for the detailed breakdown of your responsibilities and the build order.
 
 ---
-
+  
 **Track A — Backend & ML (Project Lead / Already Assigned)**
 You are building the engine of the product. This means the database, the API layer that everyone else builds against, and the ML response quality scorer — the core technical differentiator of the whole project. You will be the most critical dependency for the rest of the team, so your first job in hour one is to publish the API contracts so everyone else can start in parallel. Heavy lifting, highest impact.
 *Skills needed: Node.js / TypeScript, database design, LLM API calls, async pipelines.*

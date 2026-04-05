@@ -106,14 +106,14 @@ function Heatmap({
   colorFn: (v: number) => string;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border bg-slate-900">
+    <div className="overflow-hidden rounded-lg border bg-white/5">
       {/* Browser chrome */}
-      <div className="flex items-center gap-1.5 bg-slate-800 px-3 py-2">
+      <div className="flex items-center gap-1.5 bg-white/10 px-3 py-2">
         <div className="h-2.5 w-2.5 rounded-full bg-rose-400" />
         <div className="h-2.5 w-2.5 rounded-full bg-amber-400" />
         <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
         <div className="mx-2 flex flex-1 items-center rounded bg-slate-700 px-2 py-0.5">
-          <span className="text-[9px] text-slate-400">
+          <span className="text-[9px] text-white/40">
             survey.veritas.io/study/pms-2024/survey
           </span>
         </div>
@@ -170,7 +170,7 @@ export function BehaviorTab() {
                   <span className="h-2 w-2 rounded-full bg-rose-400" />
                   {botCount} bot-like patterns flagged
                 </span>
-                <span className="flex items-center gap-1.5 text-slate-400">
+                <span className="flex items-center gap-1.5 text-white/40">
                   Threshold: entropy &lt; 0.40 → automated
                 </span>
               </div>
@@ -181,7 +181,7 @@ export function BehaviorTab() {
 
       {/* Side-by-side heatmaps */}
       <div className="grid grid-cols-2 gap-8">
-        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <Card className="border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="px-6 pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -198,27 +198,27 @@ export function BehaviorTab() {
           <CardContent className="px-6 pb-6">
             <Heatmap grid={HUMAN_GRID} colorFn={humanCellColor} />
             <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="rounded-lg bg-slate-50 p-2">
-                <div className="font-bold text-slate-700">1,847</div>
+              <div className="rounded-lg bg-white/5 p-2">
+                <div className="font-bold text-white/70">1,847</div>
                 <div className="text-muted-foreground">Cursor Events</div>
               </div>
               <div className="rounded-lg bg-blue-50 p-2">
                 <div className="font-bold text-blue-600">0.81</div>
                 <div className="text-muted-foreground">Path Entropy</div>
               </div>
-              <div className="rounded-lg bg-slate-50 p-2">
-                <div className="font-bold text-slate-700">312s</div>
+              <div className="rounded-lg bg-white/5 p-2">
+                <div className="font-bold text-white/70">312s</div>
                 <div className="text-muted-foreground">Time on Page</div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm ring-2 ring-rose-200">
+        <Card className="border-0 shadow-sm ring-1 ring-rose-500/30">
           <CardHeader className="px-6 pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-rose-700">
+                <CardTitle className="text-rose-400">
                   Bot / Automated Pattern
                 </CardTitle>
                 <CardDescription>
@@ -232,15 +232,15 @@ export function BehaviorTab() {
             <Heatmap grid={BOT_GRID} colorFn={botCellColor} />
             <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
               <div className="rounded-lg bg-rose-50 p-2">
-                <div className="font-bold text-rose-600">47</div>
+                <div className="font-bold text-rose-400">47</div>
                 <div className="text-muted-foreground">Cursor Events</div>
               </div>
               <div className="rounded-lg bg-rose-50 p-2">
-                <div className="font-bold text-rose-600">0.11</div>
+                <div className="font-bold text-rose-400">0.11</div>
                 <div className="text-muted-foreground">Path Entropy</div>
               </div>
               <div className="rounded-lg bg-rose-50 p-2">
-                <div className="font-bold text-rose-600">12s</div>
+                <div className="font-bold text-rose-400">12s</div>
                 <div className="text-muted-foreground">Time on Page</div>
               </div>
             </div>
@@ -249,12 +249,12 @@ export function BehaviorTab() {
       </div>
 
       {/* Per-participant entropy */}
-      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+      <Card className="border-0 shadow-sm ring-1 ring-white/10">
         <CardHeader className="px-6 pt-6">
           <CardTitle className="text-lg">Per-Participant Movement Entropy</CardTitle>
           <CardDescription>
             Scores below{" "}
-            <span className="font-semibold text-rose-600">0.40</span> indicate
+            <span className="font-semibold text-rose-400">0.40</span> indicate
             automated or bot-assisted behavior
           </CardDescription>
         </CardHeader>
@@ -269,7 +269,7 @@ export function BehaviorTab() {
                   {p.id}
                 </div>
                 <div className="flex-1">
-                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
                     <div
                       className={`h-full rounded-full transition-all ${
                         p.entropy >= 0.4 ? "bg-blue-500" : "bg-rose-500"
@@ -280,7 +280,7 @@ export function BehaviorTab() {
                 </div>
                 <div
                   className={`w-10 text-right text-sm font-bold tabular-nums ${
-                    p.entropy >= 0.4 ? "text-blue-600" : "text-rose-600"
+                    p.entropy >= 0.4 ? "text-blue-600" : "text-rose-400"
                   }`}
                 >
                   {p.entropy.toFixed(2)}
@@ -288,7 +288,7 @@ export function BehaviorTab() {
                 <Badge
                   className={
                     p.pattern === "Bot"
-                      ? "bg-rose-100 text-rose-700 border-rose-200"
+                      ? "bg-rose-100 text-rose-400 border-rose-200"
                       : "bg-blue-100 text-blue-700 border-blue-200"
                   }
                 >
@@ -301,7 +301,7 @@ export function BehaviorTab() {
       </Card>
 
       {/* Heatmap legend */}
-      <Card className="border-0 bg-slate-50 ring-1 ring-slate-200">
+      <Card className="border-0 bg-white/5 ring-1 ring-white/10">
         <CardContent className="py-5 px-6">
           <div className="flex flex-wrap items-center gap-6 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">

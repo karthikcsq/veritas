@@ -1,0 +1,682 @@
+import OpenAI from "openai";
+import { pool, generateId } from "./db";
+
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+const MAX_REVERSE_PAIRS = 3;
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface QuestionMeta {
+  id: string;
+  order: number;
+  type: string;
+  prompt: string;
+  options: string[] | null;
+  config: { scale?: { min: number; max: number; minLabel?: string; maxLabel?: string } } | null;
+}
+
+interface ResponseRow {
+  questionId: string;
+  value: string;
+  timeSpentMs: number;
+}
+
+export interface ResponseTimeFlag {
+  questionId: string;
+  prompt: string;
+  timeSpentMs: number;
+  expectedMinMs: number;
+  severity: "warning" | "critical";
+  reason: string;
+}
+
+export interface ReverseScoreContradiction {
+  questionAId: string;
+  questionAPrompt: string;
+  questionAValue: string;
+  questionBId: string;
+  questionBPrompt: string;
+  questionBValue: string;
+  construct: string;
+  severity: "warning" | "critical";
+  explanation: string;
+}
+
+export interface StructuredQualityResult {
+  enrollmentId: string;
+  responseTimeScore: number;
+  responseTimeFlags: ResponseTimeFlag[];
+  reverseScoreScore: number;
+  reverseScoreContradictions: ReverseScoreContradiction[];
+  overallStructuredScore: number;
+  flagged: boolean;
+  flagReasons: string[];
+}
+
+export interface StoredReversePair {
+  id: string;
+  studyId: string;
+  questionAId: string;
+  questionBId: string;
+  construct: string;
+  relationship: string;
+}
+
+// ---------------------------------------------------------------------------
+// Specificity Analysis Types
+// ---------------------------------------------------------------------------
+
+export interface SpecificitySuggestion {
+  questionIndex: number;
+  originalPrompt: string;
+  suggestedPrompt: string;
+  reason: string;
+  suggestedType?: string;
+  suggestedConfig?: { scale?: { min: number; max: number; minLabel?: string; maxLabel?: string } } | null;
+}
+
+export interface SpecificityResult {
+  suggestions: SpecificitySuggestion[];
+  message: string;
+}
+
+export interface GeneratedReverseItem {
+  originalQuestionId: string;
+  originalPrompt: string;
+  reversePrompt: string;
+  reverseType: string;
+  reverseOptions: string[] | null;
+  reverseConfig: { scale?: { min: number; max: number; minLabel?: string; maxLabel?: string } } | null;
+  suggestedOrder: number;
+  explanation: string;
+}
+
+// ---------------------------------------------------------------------------
+// Response Time Analysis
+// ---------------------------------------------------------------------------
+
+function getExpectedMinTimeMs(question: QuestionMeta): number {
+  const promptWords = question.prompt.split(/\s+/).length;
+  const readTimeMs = promptWords * 240;
+
+  switch (question.type) {
+    case "SCALE": {
+      const scaleRange = question.config?.scale
+        ? question.config.scale.max - question.config.scale.min + 1
+        : 10;
+      return readTimeMs + Math.max(1500, scaleRange * 150);
+    }
+    case "MULTIPLE_CHOICE": {
+      const optionReadTime = (question.options ?? []).reduce(
+        (sum, opt) => sum + opt.split(/\s+/).length * 240,
+        0
+      );
+      return readTimeMs + optionReadTime + 800;
+    }
+    case "CHECKBOX": {
+      const optCount = question.options?.length ?? 4;
+      const optReadTime = (question.options ?? []).reduce(
+        (sum, opt) => sum + opt.split(/\s+/).length * 240,
+        0
+      );
+      return readTimeMs + optReadTime + optCount * 300 + 800;
+    }
+    case "SHORT_TEXT":
+      return readTimeMs + 3000;
+    case "LONG_TEXT":
+      return readTimeMs + 8000;
+    default:
+      return readTimeMs + 2000;
+  }
+}
+
+export function analyzeResponseTimes(
+  questions: QuestionMeta[],
+  responses: ResponseRow[]
+): { score: number; flags: ResponseTimeFlag[] } {
+  const questionMap = new Map(questions.map((q) => [q.id, q]));
+  const flags: ResponseTimeFlag[] = [];
+  let totalRatio = 0;
+  let counted = 0;
+
+  for (const resp of responses) {
+    const q = questionMap.get(resp.questionId);
+    if (!q) continue;
+
+    const expectedMin = getExpectedMinTimeMs(q);
+    const ratio = resp.timeSpentMs / expectedMin;
+    totalRatio += Math.min(ratio, 2.0);
+    counted++;
+
+    if (resp.timeSpentMs < expectedMin * 0.3) {
+      flags.push({
+        questionId: q.id,
+        prompt: q.prompt,
+        timeSpentMs: resp.timeSpentMs,
+        expectedMinMs: expectedMin,
+        severity: "critical",
+        reason: `Answered in ${Math.round(resp.timeSpentMs / 1000)}s — expected at least ${Math.round(expectedMin / 1000)}s to read and respond.`,
+      });
+    } else if (resp.timeSpentMs < expectedMin * 0.6) {
+      flags.push({
+        questionId: q.id,
+        prompt: q.prompt,
+        timeSpentMs: resp.timeSpentMs,
+        expectedMinMs: expectedMin,
+        severity: "warning",
+        reason: `Answered in ${Math.round(resp.timeSpentMs / 1000)}s — faster than typical reading speed (${Math.round(expectedMin / 1000)}s minimum).`,
+      });
+    }
+  }
+
+  const avgRatio = counted > 0 ? totalRatio / counted : 1;
+  const score = Math.max(0, Math.min(1, (avgRatio - 0.3) / 0.7));
+  return { score, flags };
+}
+
+// ---------------------------------------------------------------------------
+// #1: Auto-detect reverse pairs on publish (DRAFT → ACTIVE)
+// Runs ONCE per study, stores results in ReversePair table
+// ---------------------------------------------------------------------------
+
+export async function detectAndStoreReversePairs(studyId: string): Promise<StoredReversePair[]> {
+  // Clear any existing pairs for this study (idempotent re-publish)
+  await pool.query('DELETE FROM "ReversePair" WHERE "studyId" = $1', [studyId]);
+
+  const questionsResult = await pool.query(
+    `SELECT "id", "order", "type", "prompt", "options", "config"
+     FROM "Question" WHERE "studyId" = $1 ORDER BY "order"`,
+    [studyId]
+  );
+  const questions: QuestionMeta[] = questionsResult.rows;
+
+  // Scale questions can be reverse-scored — default to 1-10 if no config
+  const scaleQuestions = questions.filter((q) => q.type === "SCALE").map((q) => ({
+    ...q,
+    config: q.config?.scale ? q.config : { scale: { min: 1, max: 10, minLabel: "low", maxLabel: "high" } },
+  }));
+
+  if (scaleQuestions.length < 2) return [];
+
+  const questionDescriptions = scaleQuestions
+    .map(
+      (q) =>
+        `[${q.id}] "${q.prompt}" (${q.config!.scale!.min}-${q.config!.scale!.max}, low="${q.config!.scale!.minLabel ?? "low"}", high="${q.config!.scale!.maxLabel ?? "high"}")`
+    )
+    .join("\n");
+
+  const completion = await getOpenAI().chat.completions.create({
+    model: "gpt-5.4-mini",
+    messages: [
+      {
+        role: "user",
+        content: `You are a psychometrics expert. Given these scale questions from a clinical survey, identify pairs where one question is conceptually the REVERSE of another — a high score on one should correspond to a low score on the other.
+
+QUESTIONS:
+${questionDescriptions}
+
+Rules:
+- ONLY return pairs where the reversal is clear and unambiguous
+- Do NOT pair questions that are merely related or correlated
+- Maximum ${MAX_REVERSE_PAIRS} pairs — pick the strongest reversals
+- A reverse pair means answering high on BOTH would be a contradiction
+
+Examples of valid reversals:
+- "I feel tired" ↔ "I have energy for daily tasks"
+- "I feel sad" ↔ "I am able to enjoy life"
+- "Pain interferes with my work" ↔ "I can carry out work activities"
+
+Respond ONLY with valid JSON:
+{
+  "pairs": [
+    {
+      "questionA": "id of first question",
+      "questionB": "id of second question",
+      "construct": "the underlying thing both measure (e.g. energy level, mood)",
+      "relationship": "one-sentence explanation of why these are reversed"
+    }
+  ]
+}
+
+If no clear reverse-scored pairs exist, return an empty array.`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.1,
+  });
+
+  const result = JSON.parse(completion.choices[0].message.content!);
+  const pairs: Array<{
+    questionA: string;
+    questionB: string;
+    construct: string;
+    relationship: string;
+  }> = (result.pairs ?? []).slice(0, MAX_REVERSE_PAIRS);
+
+  // Validate that the question IDs actually exist in this study
+  const validIds = new Set(scaleQuestions.map((q) => q.id));
+  const validPairs = pairs.filter(
+    (p) => validIds.has(p.questionA) && validIds.has(p.questionB)
+  );
+
+  const stored: StoredReversePair[] = [];
+  for (const pair of validPairs) {
+    const id = generateId();
+    await pool.query(
+      `INSERT INTO "ReversePair" ("id", "studyId", "questionAId", "questionBId", "construct", "relationship", "detectedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT ("questionAId", "questionBId") DO NOTHING`,
+      [id, studyId, pair.questionA, pair.questionB, pair.construct, pair.relationship]
+    );
+    stored.push({
+      id,
+      studyId,
+      questionAId: pair.questionA,
+      questionBId: pair.questionB,
+      construct: pair.construct,
+      relationship: pair.relationship,
+    });
+  }
+
+  return stored;
+}
+
+// ---------------------------------------------------------------------------
+// Check reverse pair contradictions using STORED pairs (no GPT call)
+// ---------------------------------------------------------------------------
+
+export function checkReversePairContradictions(
+  pairs: StoredReversePair[],
+  questions: QuestionMeta[],
+  responses: ResponseRow[]
+): { score: number; contradictions: ReverseScoreContradiction[] } {
+  if (pairs.length === 0) {
+    return { score: 1.0, contradictions: [] };
+  }
+
+  const questionMap = new Map(questions.map((q) => [q.id, q]));
+  const responseMap = new Map(responses.map((r) => [r.questionId, r]));
+  const contradictions: ReverseScoreContradiction[] = [];
+
+  for (const pair of pairs) {
+    const qA = questionMap.get(pair.questionAId);
+    const qB = questionMap.get(pair.questionBId);
+    const rA = responseMap.get(pair.questionAId);
+    const rB = responseMap.get(pair.questionBId);
+
+    if (!qA || !qB || !rA || !rB) continue;
+    if (!qA.config?.scale || !qB.config?.scale) continue;
+
+    const scaleA = qA.config.scale;
+    const scaleB = qB.config.scale;
+
+    // Normalize to 0-1
+    const rangeA = scaleA.max - scaleA.min;
+    const rangeB = scaleB.max - scaleB.min;
+    if (rangeA === 0 || rangeB === 0) continue;
+
+    const normA = (Number(rA.value) - scaleA.min) / rangeA;
+    const normB = (Number(rB.value) - scaleB.min) / rangeB;
+
+    // For a reverse pair: normA + normB should be ~1.0
+    // Both high (>0.7) or both low (<0.3) = contradiction
+    const bothHigh = normA > 0.7 && normB > 0.7;
+    const bothLow = normA < 0.3 && normB < 0.3;
+
+    if (bothHigh || bothLow) {
+      const sum = normA + normB;
+      const severity = Math.abs(sum - 1.0) > 0.8 ? "critical" : "warning";
+      contradictions.push({
+        questionAId: qA.id,
+        questionAPrompt: qA.prompt,
+        questionAValue: rA.value,
+        questionBId: qB.id,
+        questionBPrompt: qB.prompt,
+        questionBValue: rB.value,
+        construct: pair.construct,
+        severity,
+        explanation: bothHigh
+          ? `Both scored high (${rA.value} and ${rB.value}) on reverse-scored items measuring "${pair.construct}". Expected one high and one low.`
+          : `Both scored low (${rA.value} and ${rB.value}) on reverse-scored items measuring "${pair.construct}". Expected one high and one low.`,
+      });
+    }
+  }
+
+  const maxDeduction = pairs.length;
+  const deduction = contradictions.reduce(
+    (sum, c) => sum + (c.severity === "critical" ? 1.0 : 0.5),
+    0
+  );
+  const score = Math.max(0, 1.0 - deduction / maxDeduction);
+
+  return { score, contradictions };
+}
+
+// ---------------------------------------------------------------------------
+// Full Structured Quality Analysis (uses stored pairs — no GPT)
+// ---------------------------------------------------------------------------
+
+export async function analyzeStructuredQuality(
+  enrollmentId: string
+): Promise<StructuredQualityResult> {
+  // Fetch study ID for this enrollment
+  const enrollRow = await pool.query(
+    'SELECT "studyId" FROM "Enrollment" WHERE "id" = $1',
+    [enrollmentId]
+  );
+  if (enrollRow.rows.length === 0) {
+    throw new Error(`Enrollment ${enrollmentId} not found`);
+  }
+  const studyId = enrollRow.rows[0].studyId;
+
+  // Fetch questions, responses, and stored reverse pairs in parallel
+  const [questionsResult, responsesResult, pairsResult] = await Promise.all([
+    pool.query(
+      `SELECT "id", "order", "type", "prompt", "options", "config"
+       FROM "Question" WHERE "studyId" = $1 ORDER BY "order"`,
+      [studyId]
+    ),
+    pool.query(
+      `SELECT "questionId", "value", "timeSpentMs"
+       FROM "Response" WHERE "enrollmentId" = $1`,
+      [enrollmentId]
+    ),
+    pool.query(
+      `SELECT "id", "studyId", "questionAId", "questionBId", "construct", "relationship"
+       FROM "ReversePair" WHERE "studyId" = $1`,
+      [studyId]
+    ),
+  ]);
+
+  const questions: QuestionMeta[] = questionsResult.rows;
+  const responses: ResponseRow[] = responsesResult.rows;
+  const pairs: StoredReversePair[] = pairsResult.rows;
+
+  // Response time analysis (pure math, no GPT)
+  const timeAnalysis = analyzeResponseTimes(questions, responses);
+
+  // Reverse pair contradiction check (pure math using stored pairs, no GPT)
+  const reverseAnalysis = checkReversePairContradictions(pairs, questions, responses);
+
+  // Composite: 60% response time, 40% reverse-score consistency
+  const overallScore =
+    timeAnalysis.score * 0.6 + reverseAnalysis.score * 0.4;
+
+  const flagReasons: string[] = [];
+  if (timeAnalysis.score < 0.4) {
+    const critCount = timeAnalysis.flags.filter((f) => f.severity === "critical").length;
+    flagReasons.push(
+      `Suspiciously fast responses: ${critCount} questions answered far below expected reading time`
+    );
+  }
+  if (reverseAnalysis.score < 0.5) {
+    flagReasons.push(
+      `Contradictory answers on ${reverseAnalysis.contradictions.length} reverse-scored item pair(s)`
+    );
+  }
+
+  return {
+    enrollmentId,
+    responseTimeScore: timeAnalysis.score,
+    responseTimeFlags: timeAnalysis.flags,
+    reverseScoreScore: reverseAnalysis.score,
+    reverseScoreContradictions: reverseAnalysis.contradictions,
+    overallStructuredScore: overallScore,
+    flagged: overallScore < 0.45,
+    flagReasons,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// #2: Recommend reverse questions during study creation
+// Returns up to MAX_REVERSE_PAIRS generated reverse items
+// ---------------------------------------------------------------------------
+
+export async function recommendReverseQuestions(
+  questions: Array<{ prompt: string; type: string; options?: string[] | null; config?: QuestionMeta["config"] }>
+): Promise<{ existingPairCount: number; recommendations: GeneratedReverseItem[] }> {
+  if (questions.length < 5) {
+    return { existingPairCount: 0, recommendations: [] };
+  }
+
+  // Step 1: Ask the AI to count existing natural reverse pairs AND suggest new ones in a single call
+  const questionDescriptions = questions
+    .map((q, i) => {
+      let desc = `[Q${i + 1}] Type: ${q.type} | "${q.prompt}"`;
+      if (q.options) desc += ` | Options: ${JSON.stringify(q.options)}`;
+      if (q.config?.scale)
+        desc += ` | Scale: ${q.config.scale.min}-${q.config.scale.max} (${q.config.scale.minLabel ?? "low"} to ${q.config.scale.maxLabel ?? "high"})`;
+      return desc;
+    })
+    .join("\n");
+
+  const completion = await getOpenAI().chat.completions.create({
+    model: "gpt-5.4-mini",
+    messages: [
+      {
+        role: "user",
+        content: `You are a psychometrics expert reviewing a clinical survey for data quality.
+
+QUESTIONS:
+${questionDescriptions}
+
+Do two things:
+
+1. COUNT how many existing question pairs are natural reverse-scored pairs — where one question is the conceptual opposite of another (e.g. "I feel sad" and "I am able to enjoy life" are reverses measuring mood). Only count CLEAR, UNAMBIGUOUS reversals.
+
+2. IF the survey has fewer than 2 natural reverse pairs, SUGGEST new reverse-scored questions to add (up to a total of 2 pairs). If it already has 2+, suggest nothing.
+
+A reverse-scored question measures the SAME construct as an existing question but with OPPOSITE meaning. Good candidates are subjective feelings/states.
+
+CRITICAL STYLE RULES for generated reverse questions:
+- Match the sentence structure and tone of the original question exactly
+- If the original starts with "I have been...", the reverse should too
+- If the original uses casual language, don't make the reverse formal
+- The reverse should look like it belongs in the same survey — a participant should not be able to tell it was auto-generated
+- Use the same scale range (min/max) and label style as the original
+
+Respond ONLY with valid JSON:
+{
+  "existingReversePairCount": 0,
+  "existingPairs": [
+    {"questionA": "Q3", "questionB": "Q7", "construct": "what they measure"}
+  ],
+  "newItems": [
+    {
+      "originalQuestionId": "Q5",
+      "originalPrompt": "the original question text",
+      "reversePrompt": "your reverse-scored question",
+      "reverseType": "SCALE or MULTIPLE_CHOICE",
+      "reverseOptions": null,
+      "reverseConfig": null or {"scale": {"min": 0, "max": 4, "minLabel": "...", "maxLabel": "..."}},
+      "suggestedOrder": 12,
+      "explanation": "One sentence on what construct this checks"
+    }
+  ]
+}
+
+If the survey already has 2+ reverse pairs, return an empty newItems array.`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.2,
+  });
+
+  const result = JSON.parse(completion.choices[0].message.content!);
+  const existingCount = result.existingReversePairCount ?? 0;
+  const needed = Math.max(0, 2 - existingCount);
+  const recommendations = ((result.newItems ?? []) as GeneratedReverseItem[]).slice(0, needed);
+
+  return { existingPairCount: existingCount, recommendations };
+}
+
+// ---------------------------------------------------------------------------
+// Specificity Analysis — compare against high-quality reference surveys
+// ---------------------------------------------------------------------------
+
+export async function analyzeSpecificity(
+  questions: Array<{ prompt: string; type: string; options?: string[] | null; config?: { scale?: { min: number; max: number; minLabel?: string; maxLabel?: string } } | null }>,
+  studyDescription: string = ""
+): Promise<SpecificityResult> {
+  if (questions.length < 3) {
+    return { suggestions: [], message: "Add more questions to analyze specificity." };
+  }
+
+  // Pull sample questions from validated surveys as reference
+  const refResult = await pool.query(
+    `SELECT q."prompt", q."type", q."config", s."title" AS "studyTitle"
+     FROM "Question" q
+     JOIN "Study" s ON s."id" = q."studyId"
+     WHERE s."id" IN ('survey_phq9', 'survey_gad7', 'survey_bpi', 'survey_factg', 'survey_isi')
+     ORDER BY RANDOM()
+     LIMIT 20`
+  );
+
+  const referenceExamples = refResult.rows
+    .map((r) => {
+      let desc = `[${r.studyTitle}] "${r.prompt}" (${r.type})`;
+      if (r.config?.scale) desc += ` Scale: ${r.config.scale.min}-${r.config.scale.max}, "${r.config.scale.minLabel ?? ""}" to "${r.config.scale.maxLabel ?? ""}"`;
+      return desc;
+    })
+    .join("\n");
+
+  const userQuestions = questions
+    .map((q, i) => {
+      let desc = `[Q${i + 1}] "${q.prompt}" (${q.type})`;
+      if (q.type === "SCALE") {
+        const sc = q.config?.scale ?? { min: 1, max: 10 };
+        desc += ` Scale: ${sc.min}-${sc.max}`;
+        if (sc.minLabel || sc.maxLabel) desc += `, "${sc.minLabel ?? ""}" to "${sc.maxLabel ?? ""}"`;
+      }
+      if (q.type === "MULTIPLE_CHOICE" || q.type === "CHECKBOX") {
+        desc += ` Options: ${JSON.stringify(q.options ?? [])}`;
+      }
+      return desc;
+    })
+    .join("\n");
+
+  const studyContext = studyDescription
+    ? `\nSTUDY DESCRIPTION (provided by researcher):\n"${studyDescription}"\n\nThe questions MUST be consistent with this description. If the description mentions a specific timeframe (e.g., "over the past month"), questions should reference that same timeframe.\n`
+    : "";
+
+  const completion = await getOpenAI().chat.completions.create({
+    model: "gpt-5.4-mini",
+    messages: [
+      {
+        role: "user",
+        content: `You are a clinical survey design expert. Evaluate EACH question using the checklist below, IN ORDER. The checklist is mandatory — you MUST check every step for every question.
+${studyContext}
+REFERENCE EXAMPLES (from validated instruments — notice how the question wording matches the response format):
+${referenceExamples}
+
+RESEARCHER'S QUESTIONS:
+${userQuestions}
+
+=== MANDATORY CHECKLIST (evaluate EVERY question in this order) ===
+
+**STEP 1 — Question-Scale Match (MOST IMPORTANT — do this first):**
+For each SCALE question, check: does the question wording match what the scale measures?
+
+- FREQUENCY statements ("I have been experiencing...", "How often...", "I have felt...") need a FREQUENCY scale:
+  → 0-4 with labels "Not at all" to "Nearly every day", OR 0-4 with "Never" to "Always"
+  → If on a 1-10 or 0-10 intensity scale, this is a MISMATCH. You MUST either:
+    (a) Suggest changing to a 0-4 frequency scale with appropriate labels, OR
+    (b) Rewrite the question to measure intensity instead (e.g., "Rate your average pain level over the past month")
+
+- INTENSITY questions ("Rate your...", "How severe...", "How much...") need an INTENSITY scale:
+  → 0-10 with labels like "No pain" to "Worst pain imaginable"
+  → If on a 0-4 frequency scale, this is a MISMATCH.
+
+- EVALUATION questions ("How would you rate...", "How satisfied...") need an EVALUATION scale:
+  → 1-5 with labels like "Very poor" to "Very good"
+
+CRITICAL: The "suggestedPrompt" text MUST make grammatical and logical sense with the scale you suggest. The question wording and scale type must match.
+
+EXAMPLES of Step 1:
+- BAD: "I have been experiencing pain" on Scale 1-10 → This is a frequency statement on an intensity scale.
+  → OPTION A (change scale to match text): suggestedPrompt="Over the past month, I have been experiencing pain", suggestedConfig={"scale":{"min":0,"max":4,"minLabel":"Not at all","maxLabel":"Nearly every day"}}
+  → OPTION B (change text to match scale): suggestedPrompt="Over the past month, rate your average pain level", suggestedConfig={"scale":{"min":0,"max":10,"minLabel":"No pain","maxLabel":"Worst pain imaginable"}}
+  Pick whichever option produces the best clinical question. Do NOT mix them (e.g., do NOT output "I have been experiencing pain" with a 0-10 intensity scale — that doesn't make sense).
+
+- BAD: "Pain has interfered with my work" on Scale 1-10 → Frequency/impact statement on intensity scale.
+  → suggestedPrompt="Over the past month, how much has pain interfered with your work?", suggestedConfig={"scale":{"min":0,"max":10,"minLabel":"Does not interfere","maxLabel":"Completely interferes"}}
+  This works because "how much" is an intensity question that matches a 0-10 scale.
+
+- BAD: "Rate your pain level" on Scale 1-10 with no labels → Scale range is OK for intensity, but MISSING LABELS.
+  → suggestedPrompt="Over the past month, rate your average pain level", suggestedConfig={"scale":{"min":0,"max":10,"minLabel":"No pain","maxLabel":"Worst pain imaginable"}}
+
+- OK: "Rate your pain level" on Scale 0-10 with "No pain"/"Worst pain" → No change needed.
+
+When Step 1 finds a mismatch, you MUST include "suggestedType" and "suggestedConfig" in your response AND the "suggestedPrompt" must be rewritten to match the new scale.
+
+**STEP 2 — Scale Labels (REQUIRED for all SCALE questions):**
+If a SCALE question has NO minLabel or maxLabel, you MUST suggest appropriate labels in "suggestedConfig", even if the question text and scale range are perfectly fine. Labels are REQUIRED for participant clarity.
+
+Examples:
+- Scale 1-10, no labels → suggest minLabel/maxLabel (e.g., "No pain" / "Worst pain imaginable")
+- Scale 0-4, no labels → suggest minLabel/maxLabel (e.g., "Not at all" / "Nearly every day")
+- Scale 0-10 with "No pain"/"Worst pain" → labels already present, no change needed
+
+When suggesting labels only (no range change), still include the full "suggestedConfig" with the existing min/max plus the new labels.
+
+**STEP 3 — Timeframe:**
+Does the question include the timeframe from the study description?
+- If the study says "past month" but the question has no timeframe, add it to the suggested prompt.
+- If there is no study description, prefer adding "Over the past 2 weeks" or similar standard clinical timeframe.
+
+**STEP 4 — Specificity:**
+Is the question specific enough compared to validated instruments?
+- Vague: "How do you feel?" → Better: "Over the past month, how much has pain interfered with your daily activities?"
+- Missing context: "I have pain" → Better: "Over the past month, I have experienced pain that interfered with daily activities"
+
+=== END CHECKLIST ===
+
+IMPORTANT RULES:
+- Step 1 (question-scale match) is the MOST IMPORTANT check. If you find a mismatch, you MUST suggest a type/config change — do NOT just rewrite the text.
+- Step 2 (labels) is REQUIRED. Any SCALE question without minLabel AND maxLabel MUST get a suggestion with labels, even if everything else is perfect.
+- ONLY flag questions that genuinely need improvement on at least one step. If a question passes ALL steps, do NOT include it.
+- Keep the same construct and intent. Match the style/tone of the original.
+
+Respond ONLY with valid JSON:
+{
+  "suggestions": [
+    {
+      "questionIndex": 0,
+      "originalPrompt": "the original question",
+      "suggestedPrompt": "the improved version",
+      "reason": "One sentence: which step(s) failed and what you fixed",
+      "suggestedType": "SCALE or MULTIPLE_CHOICE or null if no type change",
+      "suggestedConfig": {"scale": {"min": 0, "max": 4, "minLabel": "Not at all", "maxLabel": "Nearly every day"}}
+    }
+  ]
+}
+
+CRITICAL JSON RULES:
+- For ANY SCALE question suggestion, ALWAYS include "suggestedConfig" with "scale" containing min, max, minLabel, and maxLabel — even if you are only adding labels to an existing range.
+- If suggesting a type change, ALWAYS include both "suggestedType" AND "suggestedConfig".
+- "suggestedType" should be null or omitted ONLY if the type is not changing.
+
+If all questions pass all checklist steps, return an empty suggestions array.`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.2,
+  });
+
+  const result = JSON.parse(completion.choices[0].message.content!);
+  const suggestions: SpecificitySuggestion[] = (result.suggestions ?? []).filter(
+    (s: SpecificitySuggestion) => s.originalPrompt && s.suggestedPrompt && s.originalPrompt !== s.suggestedPrompt
+  );
+
+  return {
+    suggestions,
+    message: suggestions.length > 0
+      ? `${suggestions.length} question(s) could be more specific. Review the suggestions below.`
+      : "All questions are sufficiently specific.",
+  };
+}

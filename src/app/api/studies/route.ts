@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { pool, generateId } from "@/lib/db";
+import { detectAndStoreReversePairs, recommendReverseQuestions, analyzeSpecificity } from "@/lib/quality";
 import type { CreateStudyRequest } from "@/types";
 
 export async function POST(req: Request) {
@@ -19,16 +20,26 @@ export async function POST(req: Request) {
 
     const studyId = generateId();
     const studyResult = await client.query(
-      'INSERT INTO "Study" ("id", "researcherId", "title", "description", "status", "targetCount", "compensationUsd", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) RETURNING "id", "title", "status"',
-      [studyId, researcherId, body.title, body.description, "DRAFT", body.targetCount, body.compensationUsd]
+      'INSERT INTO "Study" ("id", "researcherId", "title", "description", "status", "publiclyListed", "targetCount", "compensationUsd", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()) RETURNING "id", "title", "status"',
+      [studyId, researcherId, body.title, body.description, "DRAFT", body.publiclyListed ?? false, body.targetCount, body.compensationUsd]
     );
     const study = studyResult.rows[0];
 
     for (const q of body.questions) {
       const questionId = generateId();
       await client.query(
-        'INSERT INTO "Question" ("id", "studyId", "order", "type", "prompt", "options") VALUES ($1, $2, $3, $4, $5, $6)',
-        [questionId, studyId, q.order, q.type, q.prompt, q.options ? JSON.stringify(q.options) : null]
+        'INSERT INTO "Question" ("id", "studyId", "order", "type", "prompt", "options", "required", "config", "dependsOn") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        [
+          questionId,
+          studyId,
+          q.order,
+          q.type,
+          q.prompt,
+          q.options ? JSON.stringify(q.options) : null,
+          q.required !== false,
+          q.config ? JSON.stringify(q.config) : null,
+          q.dependsOn ? JSON.stringify(q.dependsOn) : null,
+        ]
       );
     }
 

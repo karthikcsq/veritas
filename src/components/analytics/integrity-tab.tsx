@@ -240,7 +240,7 @@ function ScoreBar({
       : "bg-emerald-400";
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
         <div
           className={`h-full rounded-full transition-all ${color}`}
           style={{ width: `${value * 100}%` }}
@@ -266,7 +266,7 @@ function WhyTooltip({ reason }: { reason: string }) {
       </button>
       {open && (
         <span className="absolute left-5 top-0 z-50 w-72 rounded-lg border bg-popover p-3 text-xs shadow-xl">
-          <span className="mb-1 block font-semibold text-rose-600">
+          <span className="mb-1 block font-semibold text-rose-400">
             Flag Reason
           </span>
           {reason}
@@ -301,20 +301,20 @@ export function IntegrityTab() {
     <div className="space-y-8">
       {/* Summary cards */}
       <div className="grid grid-cols-4 gap-6">
-        <Card className="border-0 shadow-sm ring-2 ring-rose-200 bg-gradient-to-br from-rose-50 to-red-50">
+        <Card className="border-0 shadow-sm ring-1 ring-rose-500/30 bg-rose-500/10">
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
-              <div className="text-4xl font-bold text-rose-600 tabular-nums">
+              <div className="text-4xl font-bold text-rose-400 tabular-nums">
                 {flagged.length}
               </div>
-              <div className="mt-1 text-sm font-semibold text-rose-700/80">
+              <div className="mt-1 text-sm font-semibold text-rose-400/80">
                 Flagged Responses
               </div>
-              <div className="mt-1 text-xs text-rose-600/60">
+              <div className="mt-1 text-xs text-rose-400/60">
                 {((flagged.length / ENROLLMENTS.length) * 100).toFixed(1)}% of total
               </div>
             </div>
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/15">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/20">
               <AlertTriangle className="h-7 w-7 text-rose-500" />
             </div>
           </CardContent>
@@ -337,38 +337,38 @@ export function IntegrityTab() {
             </div>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-sm ring-2 ring-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50">
+        <Card className="border-0 shadow-sm ring-1 ring-amber-500/30 bg-amber-500/10">
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
-              <div className="text-4xl font-bold text-amber-600 tabular-nums">
+              <div className="text-4xl font-bold text-amber-400 tabular-nums">
                 {botDetected.length}
               </div>
-              <div className="mt-1 text-sm font-semibold text-amber-700/80">
+              <div className="mt-1 text-sm font-semibold text-amber-400/80">
                 Bot-Like Behavior
               </div>
-              <div className="mt-1 text-xs text-amber-600/60">
+              <div className="mt-1 text-xs text-amber-400/60">
                 Low entropy patterns
               </div>
             </div>
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/20">
               <Bot className="h-7 w-7 text-amber-500" />
             </div>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-sm ring-2 ring-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50">
+        <Card className="border-0 shadow-sm ring-1 ring-emerald-500/30 bg-emerald-500/10">
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
-              <div className="text-4xl font-bold text-emerald-600 tabular-nums">
+              <div className="text-4xl font-bold text-emerald-400 tabular-nums">
                 {valid.length}
               </div>
-              <div className="mt-1 text-sm font-semibold text-emerald-700/80">
+              <div className="mt-1 text-sm font-semibold text-emerald-400/80">
                 Valid Responses
               </div>
-              <div className="mt-1 text-xs text-emerald-600/60">
+              <div className="mt-1 text-xs text-emerald-400/60">
                 Passed all integrity checks
               </div>
             </div>
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20">
               <CheckCircle className="h-7 w-7 text-emerald-500" />
             </div>
           </CardContent>
@@ -376,7 +376,7 @@ export function IntegrityTab() {
       </div>
 
       {/* Table */}
-      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+      <Card className="border-0 shadow-sm ring-1 ring-white/10">
         <CardHeader className="flex flex-row items-start justify-between px-6 pt-6">
           <div>
             <CardTitle className="text-lg">Participant Integrity Scores</CardTitle>
@@ -393,7 +393,7 @@ export function IntegrityTab() {
             <button
               onClick={() => setShowOnlyClean(!showOnlyClean)}
               className={`relative h-6 w-11 rounded-full transition-colors ${
-                showOnlyClean ? "bg-emerald-500" : "bg-slate-200"
+                showOnlyClean ? "bg-emerald-500" : "bg-white/10"
               }`}
             >
               <div
@@ -418,8 +418,8 @@ export function IntegrityTab() {
               onClick={() => e.answers.length > 0 && setSelected(e)}
               className={`grid grid-cols-[140px_120px_1fr_1fr_80px] items-center gap-4 border-b px-3 py-4 text-sm last:border-0 transition-colors ${
                 e.status === "FLAGGED"
-                  ? "bg-rose-50/60 hover:bg-rose-50"
-                  : "hover:bg-slate-50"
+                  ? "bg-rose-500/10 hover:bg-rose-50"
+                  : "hover:bg-white/5"
               } ${e.answers.length > 0 ? "cursor-pointer" : ""}`}
             >
               <div>
@@ -471,7 +471,7 @@ export function IntegrityTab() {
 
       {/* Side-by-side comparison */}
       {selected && (
-        <Card className="border-0 shadow-sm ring-2 ring-violet-200 bg-gradient-to-br from-violet-50/40 to-purple-50/40">
+        <Card className="border-0 shadow-sm ring-1 ring-[#2874a6]/30 bg-[#2874a6]/10">
           <CardHeader className="flex flex-row items-start justify-between px-6 pt-6 pb-4">
             <div>
               <CardTitle>Side-by-Side Comparison</CardTitle>
@@ -480,8 +480,8 @@ export function IntegrityTab() {
                 <strong
                   className={
                     selected.quality !== null && selected.quality < 0.45
-                      ? "text-rose-600"
-                      : "text-emerald-600"
+                      ? "text-rose-400"
+                      : "text-emerald-400"
                   }
                 >
                   {selected.quality?.toFixed(2)}
@@ -503,14 +503,14 @@ export function IntegrityTab() {
                   {a.question}
                 </div>
                 <div className="grid grid-cols-2 gap-5">
-                  <div className="rounded-xl border-2 border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="rounded-xl border-2 border-white/10 bg-white/10 p-5 shadow-sm">
                     <div className="mb-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                       Participant Response
                     </div>
                     <p className="text-sm leading-relaxed">{a.answer}</p>
                   </div>
-                  <div className="rounded-xl border-2 border-dashed border-violet-200 bg-violet-50/50 p-5">
-                    <div className="mb-3 text-[10px] font-bold uppercase tracking-wider text-violet-600">
+                  <div className="rounded-xl border-2 border-dashed border-[#2874a6]/30 bg-[#2874a6]/10 p-5">
+                    <div className="mb-3 text-[10px] font-bold uppercase tracking-wider text-[#3498db]">
                       Avg High-Quality Response
                     </div>
                     <p className="text-sm leading-relaxed italic text-muted-foreground">

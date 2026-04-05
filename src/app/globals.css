@@ -122,3 +122,92 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Animated gradient border ─────────────────────── */
+@keyframes borderRotate {
+  0% { --border-angle: 0deg; }
+  100% { --border-angle: 360deg; }
+}
+
+@property --border-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@property --glow-opacity {
+  syntax: "<number>";
+  initial-value: 0;
+  inherits: false;
+}
+
+/* Glass card */
+[data-slot="card"] {
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(40px) saturate(130%) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(130%) brightness(1.05);
+  border: none !important;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255,255,255,0.07),
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 4px 24px rgba(0,0,0,0.2);
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease, background 0.35s ease;
+}
+
+[data-slot="card"]:hover {
+  background: rgba(255,255,255,0.05);
+  transform: translateY(-3px) scale(1.005);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255,255,255,0.1),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 12px 48px rgba(0,0,0,0.3);
+}
+
+/* Animated glow blobs in background */
+@keyframes floatBlob1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
+}
+@keyframes floatBlob2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-25px, 25px) scale(1.1); }
+  66% { transform: translate(35px, -10px) scale(0.9); }
+}
+@keyframes floatBlob3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(15px, 30px) scale(0.95); }
+  66% { transform: translate(-30px, -20px) scale(1.08); }
+}
+
+.ambient-blob-1 { animation: floatBlob1 20s ease-in-out infinite; }
+.ambient-blob-2 { animation: floatBlob2 25s ease-in-out infinite; }
+.ambient-blob-3 { animation: floatBlob3 22s ease-in-out infinite; }
+
+/* Stat pills hover */
+[data-slot="card"] .stat-pill {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-slot="card"] .stat-pill:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 20px rgba(139,92,246,0.15);
+}
+
+/* Button hover glow */
+button, a[role="button"], [role="tab"] {
+  transition: all 0.2s ease;
+}
+button:hover, a[role="button"]:hover {
+  text-shadow: 0 0 12px rgba(255,255,255,0.15);
+}

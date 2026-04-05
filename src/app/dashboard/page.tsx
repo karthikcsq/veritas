@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { signOut } from "next-auth/react";
 
 // Mock data — replace with API calls
 const mockStudies = [
@@ -36,26 +38,42 @@ const statusColor = {
 
 export default function DashboardPage() {
   return (
-    <div className="min-h-screen bg-muted/30">
-      {/* Top bar */}
-      <header className="border-b bg-background px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">V</span>
-          </div>
-          <span className="font-semibold text-lg">Veritas</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
-            Dr. Jane Smith
-          </span>
-          <Button variant="ghost" size="sm">
-            Sign out
-          </Button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Ambient glow blobs for glass to blur against */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="ambient-blob-1 absolute -top-60 -left-60 h-[800px] w-[800px] rounded-full bg-[#1a5276]/20 blur-[150px]" />
+        <div className="ambient-blob-2 absolute top-1/4 -right-40 h-[700px] w-[700px] rounded-full bg-[#2874a6]/15 blur-[130px]" />
+        <div className="ambient-blob-3 absolute -bottom-60 left-1/4 h-[700px] w-[700px] rounded-full bg-[#1b4f72]/12 blur-[130px]" />
+        <div className="ambient-blob-2 absolute top-2/3 left-1/2 h-[500px] w-[500px] rounded-full bg-[#21618c]/10 blur-[120px]" />
+      </div>
+      {/* Logo — top left */}
+      <div className="absolute top-6 left-6 z-10">
+        <Link href="/">
+          <Image
+            src="/logo.png"
+            alt="Veritas"
+            width={40}
+            height={40}
+            className="rounded-full hover:opacity-80 transition-all cursor-pointer"
+            style={{ filter: "brightness(1.4)" }}
+          />
+        </Link>
+      </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      {/* Sign out — top right */}
+      <div className="absolute top-6 right-6 z-10 flex items-center gap-3">
+        <span className="text-sm text-muted-foreground">Dr. Jane Smith</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => signOut({ callbackUrl: "/" })}
+          className="text-white/60 hover:text-white"
+        >
+          Sign out
+        </Button>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-6 pt-20 pb-8">
         {/* Page header */}
         <div className="flex items-center justify-between mb-8">
           <div>
