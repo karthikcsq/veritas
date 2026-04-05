@@ -130,7 +130,7 @@ function buildValidityPrompt(
       ? "This is a short-answer question. The answer should be a brief, on-topic response."
       : "This is a long-form question. The answer should address the topic with some substance.";
 
-  return `You evaluate whether a survey answer is a reasonable attempt at responding to the question asked. Be generous — people answer casually and that is perfectly fine.
+  return `You evaluate whether a survey answer is a reasonable attempt at responding to the question asked. Be generous. People answer casually and that is perfectly fine.
 
 ${typeGuidance}
 
@@ -147,9 +147,11 @@ Score the answer's VALIDITY from 0 to 100:
 - 61-80: Mostly valid. Clearly responds to the question with minor gaps.
 - 81-100: Fully valid. Directly and clearly addresses what the question asked.
 
-Be lenient with casual, short, or informal answers — as long as the person is genuinely trying to respond to the question, score generously. Do NOT judge grammar, spelling, depth, or effort — only whether the answer is on-topic.
+Be lenient with casual, short, or informal answers. As long as the person is genuinely trying to respond to the question, score generously. Do NOT judge grammar, spelling, depth, or effort. Only judge whether the answer is on-topic.
 
 If the question asks about multiple things and the answer misses some of them, list the EXACT substrings from the question text that were not addressed in "missedParts". Each entry must be a verbatim substring of the QUESTION text above. If nothing was missed, return an empty array.
+
+IMPORTANT: Do NOT use em dashes in your explanation. Use commas, periods, or "and" instead.
 
 Respond ONLY with valid JSON:
 {
@@ -165,7 +167,7 @@ export async function checkResponseValidity(
   questionType: QuestionType
 ): Promise<ValidityResult> {
   if (questionType === "SCALE" || questionType === "MULTIPLE_CHOICE") {
-    return { score: 100, explanation: "Structured response — inherently valid.", missedParts: [] };
+    return { score: 100, explanation: "Structured response, inherently valid.", missedParts: [] };
   }
 
   const trimmed = answer.trim();

@@ -537,26 +537,70 @@ export default function SurveyPage() {
                   })()}
 
                 {question.type === "LONG_TEXT" && (
-                  <textarea
-                    className="w-full min-h-[120px] rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
-                    placeholder="Type your answer..."
-                    value={answers[question.id] || ""}
-                    onChange={(e) =>
-                      setAnswer(question.id, e.target.value)
-                    }
-                  />
+                  <div className="relative">
+                    <textarea
+                      className="w-full min-h-[120px] rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
+                      placeholder="Type your answer..."
+                      value={answers[question.id] || ""}
+                      onChange={(e) =>
+                        setAnswer(question.id, e.target.value)
+                      }
+                    />
+                    {currentValidity && !currentValidity.dismissed && (
+                      <div className="absolute -right-2 top-2 translate-x-full max-w-[200px] z-10">
+                        <div className="relative bg-amber-500/15 backdrop-blur-sm border border-amber-500/30 rounded-xl rounded-tl-sm px-3 py-2 text-xs text-amber-200 shadow-lg">
+                          <p className="font-medium leading-snug">
+                            {currentValidity.score < 20
+                              ? "Hmm, this doesn't seem related to the question. Mind taking another look?"
+                              : "Heads up: your answer might not fully cover what's being asked."}
+                          </p>
+                          <p className="mt-1 text-amber-300/60 leading-snug">
+                            {currentValidity.explanation}
+                          </p>
+                          <button
+                            className="mt-1.5 text-[10px] text-amber-400/70 hover:text-amber-300 underline underline-offset-2"
+                            onClick={() => dismissWarning(question.id)}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {question.type === "SHORT_TEXT" && (
-                  <input
-                    type="text"
-                    className="w-full rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
-                    placeholder="Type your answer..."
-                    value={answers[question.id] || ""}
-                    onChange={(e) =>
-                      setAnswer(question.id, e.target.value)
-                    }
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="w-full rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
+                      placeholder="Type your answer..."
+                      value={answers[question.id] || ""}
+                      onChange={(e) =>
+                        setAnswer(question.id, e.target.value)
+                      }
+                    />
+                    {currentValidity && !currentValidity.dismissed && (
+                      <div className="absolute -right-2 top-1/2 -translate-y-1/2 translate-x-full max-w-[200px] z-10">
+                        <div className="relative bg-amber-500/15 backdrop-blur-sm border border-amber-500/30 rounded-xl rounded-tl-sm px-3 py-2 text-xs text-amber-200 shadow-lg">
+                          <p className="font-medium leading-snug">
+                            {currentValidity.score < 20
+                              ? "Hmm, this doesn't seem related to the question. Mind taking another look?"
+                              : "Heads up: your answer might not fully cover what's being asked."}
+                          </p>
+                          <p className="mt-1 text-amber-300/60 leading-snug">
+                            {currentValidity.explanation}
+                          </p>
+                          <button
+                            className="mt-1.5 text-[10px] text-amber-400/70 hover:text-amber-300 underline underline-offset-2"
+                            onClick={() => dismissWarning(question.id)}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {question.type === "MULTIPLE_CHOICE" &&
@@ -635,28 +679,6 @@ export default function SurveyPage() {
                     );
                   })()}
 
-                {currentValidity && !currentValidity.dismissed && (
-                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                    <p className="font-medium">
-                      {currentValidity.score < 20
-                        ? "Hmm, this doesn\u2019t seem related to the question \u2014 mind taking another look?"
-                        : "Just a heads up \u2014 your answer might not fully cover what\u2019s being asked."}
-                    </p>
-                    <p className="mt-1 text-xs text-amber-300/70">
-                      {currentValidity.explanation}
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-amber-500/30 text-amber-200 hover:bg-amber-500/20"
-                        onClick={() => dismissWarning(question.id)}
-                      >
-                        Keep my answer
-                      </Button>
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
           );
