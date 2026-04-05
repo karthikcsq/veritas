@@ -506,7 +506,7 @@ export default function Home() {
 
       {/* Logo loop — bottom right */}
       <div className="fixed bottom-6 right-6 z-[40] flex flex-col items-end gap-1.5 opacity-0 animate-[fadeSlideUp_1.2s_ease-out_2.4s_forwards]">
-        <span className="text-[11px] text-white/30 tracking-wide whitespace-nowrap">built with love at catapult26</span>
+        <span className="text-sm text-white/60 tracking-wide whitespace-nowrap">made with ♥ at catapult 26 using:</span>
         <LogoLoop
           logos={[
             { src: "https://cdn.simpleicons.org/docker/white", title: "Docker" },
@@ -531,7 +531,7 @@ export default function Home() {
 
       {/* Bottom left links */}
       <div className="fixed bottom-6 left-6 z-[40] opacity-0 animate-[fadeSlideUp_1.2s_ease-out_2.4s_forwards]">
-        <span className="text-sm text-white/60 tracking-wide whitespace-nowrap">check out our github and devpost</span>
+        <span className="text-sm text-white/60 tracking-wide whitespace-nowrap">check out our <a href="https://github.com/karthikcsq/veritas" target="_blank" rel="noopener noreferrer" className="underline hover:text-white transition-colors">github</a> and <a href="https://devpost.com/software/veritas-81fzu6" target="_blank" rel="noopener noreferrer" className="underline hover:text-white transition-colors">devpost</a>!</span>
       </div>
 
       {/* Glass overlays */}
