@@ -547,8 +547,11 @@ export default function SurveyPage() {
                       }
                     />
                     {currentValidity && !currentValidity.dismissed && (
-                      <div className="absolute -right-2 top-2 translate-x-full max-w-[200px] z-10">
-                        <div className="relative bg-amber-500/15 backdrop-blur-sm border border-amber-500/30 rounded-xl rounded-tl-sm px-3 py-2 text-xs text-amber-200 shadow-lg">
+                      <div className="mt-2 flex items-start gap-2">
+                        <div className="mt-0.5 h-5 w-5 shrink-0 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+                          <span className="text-amber-300 text-[10px]">!</span>
+                        </div>
+                        <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg rounded-tl-sm px-3 py-2 text-xs text-amber-200">
                           <p className="font-medium leading-snug">
                             {currentValidity.score < 20
                               ? "Hmm, this doesn't seem related to the question. Mind taking another look?"
