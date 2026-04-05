@@ -477,11 +477,11 @@ export default function SurveyPage() {
           const isDependent = !!question.dependsOn;
 
           return (
+            <div key={question.id} className="flex items-start gap-3">
             <Card
-              key={question.id}
-              className={
+              className={`flex-1 ${
                 isDependent ? "ml-4 border-l-2 border-l-[#3498db]/30" : ""
-              }
+              }`}
             >
               <CardHeader>
                 <CardTitle className="text-lg text-white">
@@ -537,73 +537,26 @@ export default function SurveyPage() {
                   })()}
 
                 {question.type === "LONG_TEXT" && (
-                  <div className="relative">
-                    <textarea
-                      className="w-full min-h-[120px] rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
-                      placeholder="Type your answer..."
-                      value={answers[question.id] || ""}
-                      onChange={(e) =>
-                        setAnswer(question.id, e.target.value)
-                      }
-                    />
-                    {currentValidity && !currentValidity.dismissed && (
-                      <div className="mt-2 flex items-start gap-2">
-                        <div className="mt-0.5 h-5 w-5 shrink-0 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
-                          <span className="text-amber-300 text-[10px]">!</span>
-                        </div>
-                        <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg rounded-tl-sm px-3 py-2 text-xs text-amber-200">
-                          <p className="font-medium leading-snug">
-                            {currentValidity.score < 20
-                              ? "Hmm, this doesn't seem related to the question. Mind taking another look?"
-                              : "Heads up: your answer might not fully cover what's being asked."}
-                          </p>
-                          <p className="mt-1 text-amber-300/60 leading-snug">
-                            {currentValidity.explanation}
-                          </p>
-                          <button
-                            className="mt-1.5 text-[10px] text-amber-400/70 hover:text-amber-300 underline underline-offset-2"
-                            onClick={() => dismissWarning(question.id)}
-                          >
-                            Dismiss
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <textarea
+                    className="w-full min-h-[120px] rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
+                    placeholder="Type your answer..."
+                    value={answers[question.id] || ""}
+                    onChange={(e) =>
+                      setAnswer(question.id, e.target.value)
+                    }
+                  />
                 )}
 
                 {question.type === "SHORT_TEXT" && (
-                  <div className="relative">
-                    <input
-                      type="text"
-                      className="w-full rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
-                      placeholder="Type your answer..."
-                      value={answers[question.id] || ""}
-                      onChange={(e) =>
-                        setAnswer(question.id, e.target.value)
-                      }
-                    />
-                    {currentValidity && !currentValidity.dismissed && (
-                      <div className="absolute -right-2 top-1/2 -translate-y-1/2 translate-x-full max-w-[200px] z-10">
-                        <div className="relative bg-amber-500/15 backdrop-blur-sm border border-amber-500/30 rounded-xl rounded-tl-sm px-3 py-2 text-xs text-amber-200 shadow-lg">
-                          <p className="font-medium leading-snug">
-                            {currentValidity.score < 20
-                              ? "Hmm, this doesn't seem related to the question. Mind taking another look?"
-                              : "Heads up: your answer might not fully cover what's being asked."}
-                          </p>
-                          <p className="mt-1 text-amber-300/60 leading-snug">
-                            {currentValidity.explanation}
-                          </p>
-                          <button
-                            className="mt-1.5 text-[10px] text-amber-400/70 hover:text-amber-300 underline underline-offset-2"
-                            onClick={() => dismissWarning(question.id)}
-                          >
-                            Dismiss
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <input
+                    type="text"
+                    className="w-full rounded-md border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#3498db]"
+                    placeholder="Type your answer..."
+                    value={answers[question.id] || ""}
+                    onChange={(e) =>
+                      setAnswer(question.id, e.target.value)
+                    }
+                  />
                 )}
 
                 {question.type === "MULTIPLE_CHOICE" &&
@@ -684,6 +637,28 @@ export default function SurveyPage() {
 
               </CardContent>
             </Card>
+            {currentValidity && !currentValidity.dismissed && (
+              <div className="w-[220px] shrink-0 self-center">
+                <div className="relative bg-amber-500/10 backdrop-blur-sm border border-amber-500/25 rounded-xl rounded-tl-none px-3 py-2.5 text-xs text-amber-200 shadow-lg">
+                  <div className="absolute -left-1.5 top-4 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[6px] border-r-amber-500/25" />
+                  <p className="font-medium leading-snug">
+                    {currentValidity.score < 20
+                      ? "Hmm, this doesn't seem related to the question. Mind taking another look?"
+                      : "Heads up: your answer might not fully cover what's being asked."}
+                  </p>
+                  <p className="mt-1.5 text-amber-300/60 leading-snug">
+                    {currentValidity.explanation}
+                  </p>
+                  <button
+                    className="mt-2 text-[10px] text-amber-400/70 hover:text-amber-300 underline underline-offset-2"
+                    onClick={() => dismissWarning(question.id)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+            </div>
           );
         })}
 
