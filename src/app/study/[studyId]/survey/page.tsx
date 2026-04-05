@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -128,16 +128,26 @@ interface QuestionPage {
 
 export default function SurveyPage() {
   const { studyId } = useParams<{ studyId: string }>();
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const enrollmentId = searchParams.get("enrollmentId");
 
-  // Auth gate — redirect to login if no participant session
+  // Get enrollment ID from localStorage (set during enrollment, cleared on submit)
+  const [enrollmentId, setEnrollmentId] = useState<string | null>(null);
+
   useEffect(() => {
-    const stored = localStorage.getItem("veritas_participant");
-    if (!stored) {
+    // Auth gate
+    const participant = localStorage.getItem("veritas_participant");
+    if (!participant) {
       router.replace(`/study/login?redirect=/study/${studyId}`);
+      return;
     }
+    // Load enrollment
+    const stored = localStorage.getItem(`veritas_enrollment_${studyId}`);
+    if (!stored) {
+      // No enrollment — send back to study page to enroll
+      router.replace(`/study/${studyId}`);
+      return;
+    }
+    setEnrollmentId(stored);
   }, [router, studyId]);
 
   const [questions, setQuestions] = useState<SurveyQuestion[]>([]);
