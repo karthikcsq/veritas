@@ -8,6 +8,7 @@ import {
 } from "@worldcoin/idkit";
 import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -188,9 +189,7 @@ export default function StudyEnrollPage() {
     <div className="flex-1 flex items-center justify-center px-4 py-8">
       <Card className="w-full max-w-lg">
         <CardHeader className="text-center">
-          <div className="mx-auto h-10 w-10 rounded-lg bg-primary flex items-center justify-center mb-2">
-            <span className="text-primary-foreground font-bold">V</span>
-          </div>
+          <Image src="/logo.png" alt="Veritas" width={44} height={44} className="mx-auto mb-2" style={{ filter: "brightness(1.4)" }} />
           <CardTitle className="text-2xl">{study.title}</CardTitle>
           <CardDescription className="mt-2">
             {study.description}

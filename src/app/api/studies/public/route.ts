@@ -12,7 +12,7 @@ export async function GET() {
       COUNT(q."id") AS "questionCount"
     FROM "Study" s
     LEFT JOIN "Question" q ON q."studyId" = s."id"
-    WHERE s."status" = 'ACTIVE' AND s."publiclyListed" = true
+    WHERE s."status" = 'ACTIVE'
     GROUP BY s."id", s."title", s."description", s."compensationUsd", s."targetCount", s."createdAt"
     ORDER BY s."createdAt" DESC`
   );
