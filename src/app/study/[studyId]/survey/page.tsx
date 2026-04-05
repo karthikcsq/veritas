@@ -338,7 +338,7 @@ export default function SurveyPage() {
       });
       const data: ValidateResponseResponse = await res.json();
 
-      if (data.score < 40) {
+      if (data.score < 50) {
         setValidity((prev) => ({
           ...prev,
           [needsValidation.id]: {

@@ -130,7 +130,7 @@ function buildValidityPrompt(
       ? "This is a short-answer question. The answer should be a brief, on-topic response."
       : "This is a long-form question. The answer should address the topic with some substance.";
 
-  return `You evaluate whether a survey answer is a reasonable attempt at responding to the question asked. Be generous. People answer casually and that is perfectly fine.
+  return `You evaluate whether a survey answer actually addresses ALL parts of the question asked. You are thorough but fair.
 
 ${typeGuidance}
 
@@ -140,14 +140,24 @@ ${question}
 ANSWER:
 ${answer}
 
-Score the answer's VALIDITY from 0 to 100:
-- 0-20: Completely irrelevant. The answer has nothing to do with the question (e.g. random words, copy-paste from elsewhere, answering a totally different question).
-- 21-40: Marginally related. Mentions a related topic but does not answer what was asked.
-- 41-60: Partially valid. Addresses part of the question but misses key aspects or is vague.
-- 61-80: Mostly valid. Clearly responds to the question with minor gaps.
-- 81-100: Fully valid. Directly and clearly addresses what the question asked.
+STEP 1: Break the question into individual parts or sub-questions. A question like "where is it located, what does it feel like, and when is it worst?" has THREE parts.
 
-Be lenient with casual, short, or informal answers. As long as the person is genuinely trying to respond to the question, score generously. Do NOT judge grammar, spelling, depth, or effort. Only judge whether the answer is on-topic.
+STEP 2: Check if the answer addresses EACH part. An answer that only covers one part of a multi-part question is NOT fully valid.
+
+STEP 3: Score the answer's VALIDITY from 0 to 100:
+- 0-15: Completely off-topic. The answer has nothing to do with the question.
+- 16-30: Barely related. Mentions a vaguely related topic but does not attempt to answer what was asked.
+- 31-50: Partially valid. Addresses some parts of the question but clearly misses others. A one-word or vague answer to a question asking for details falls here.
+- 51-70: Mostly valid. Covers the main point but skips a specific part the question asked about.
+- 71-85: Good. Addresses all parts of the question, even if briefly.
+- 86-100: Excellent. Thoroughly addresses every part of the question.
+
+SCORING RULES:
+- If the question asks for multiple things (e.g. "where, what, when"), the answer MUST touch on each one to score above 70.
+- A vague one-sentence answer to a detailed multi-part question should score 30-50, not higher.
+- Casual tone is fine. Do NOT penalize informal language, slang, or brevity IF the content actually answers what was asked.
+- DO penalize answers that are generic, evasive, or only address part of the question.
+- A short but specific answer ("sharp pain in my lower back, worst in mornings") is better than a long vague one.
 
 If the question asks about multiple things and the answer misses some of them, list the EXACT substrings from the question text that were not addressed in "missedParts". Each entry must be a verbatim substring of the QUESTION text above. If nothing was missed, return an empty array.
 
