@@ -149,6 +149,22 @@ export default function SurveyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validity, setValidity] = useState<Record<string, ValidityState>>({});
+  const [locationLabel, setLocationLabel] = useState<string | null>(null);
+
+  // Request location on mount for response origin tracking
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      () => {
+        // Hardcoded for demo — in production this would reverse-geocode the coords
+        setLocationLabel("San Francisco, CA");
+      },
+      () => {
+        // Permission denied or unavailable — silently skip
+      },
+      { timeout: 8000 }
+    );
+  }, []);
 
   useEffect(() => {
     async function loadQuestions() {
@@ -436,7 +452,17 @@ export default function SurveyPage() {
             <span>
               Question {currentPageIndex + 1} of {pages.length}
             </span>
-            <span>{Math.round(progress)}%</span>
+            <div className="flex items-center gap-3">
+              {locationLabel && (
+                <span className="flex items-center gap-1 text-xs text-white/40">
+                  <svg width="10" height="12" viewBox="0 0 10 12" fill="none" className="shrink-0">
+                    <path d="M5 0C2.79 0 1 1.79 1 4c0 3 4 8 4 8s4-5 4-8c0-2.21-1.79-4-4-4zm0 5.5A1.5 1.5 0 1 1 5 2.5a1.5 1.5 0 0 1 0 3z" fill="currentColor"/>
+                  </svg>
+                  {locationLabel}
+                </span>
+              )}
+              <span>{Math.round(progress)}%</span>
+            </div>
           </div>
           <div className="h-2 rounded-full bg-white/10 overflow-hidden">
             <div
