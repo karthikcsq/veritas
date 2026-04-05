@@ -56,7 +56,9 @@ export async function upsertResponseVector(
   values: number[],
   metadata: ResponseMetadata
 ): Promise<void> {
-  await getIndex().upsert([{ id: responseId, values, metadata }]);
+  await getIndex().upsert({
+    records: [{ id: responseId, values, metadata }],
+  });
 }
 
 /**

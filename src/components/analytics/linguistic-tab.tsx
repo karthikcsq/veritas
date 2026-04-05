@@ -207,13 +207,15 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
                       width={30}
                     />
                     <Tooltip
-                      formatter={(v: number, name: string) => {
-                        const label = name === "expected" ? "Expected" : "Avg Time";
-                        return [`${v}s`, label];
+                      formatter={(v, name) => {
+                        const n = typeof v === "number" ? v : Number(v);
+                        const label = String(name) === "expected" ? "Expected" : "Avg Time";
+                        return [`${Number.isFinite(n) ? n : 0}s`, label];
                       }}
-                      labelFormatter={(label: string) => {
-                        const stat = timeData.find((d) => d.q === label);
-                        return stat?.prompt ?? label;
+                      labelFormatter={(label) => {
+                        const key = typeof label === "string" ? label : String(label ?? "");
+                        const stat = timeData.find((d) => d.q === key);
+                        return stat?.prompt ?? key;
                       }}
                     />
                     <Bar dataKey="avg" name="Avg Time (s)" radius={[0, 4, 4, 0]}>
@@ -316,12 +318,15 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
                   <ZAxis range={[80, 80]} />
                   <Tooltip
                     cursor={{ strokeDasharray: "3 3" }}
-                    formatter={(v: number, name: string) => [
-                      name === "quality"
-                        ? v.toFixed(2)
-                        : `${v} words`,
-                      name === "quality" ? "Quality Score" : "Avg Words",
-                    ]}
+                    formatter={(v, name) => {
+                      const n = typeof v === "number" ? v : Number(v);
+                      const nm = String(name);
+                      const safe = Number.isFinite(n) ? n : 0;
+                      return [
+                        nm === "quality" ? safe.toFixed(2) : `${safe} words`,
+                        nm === "quality" ? "Quality Score" : "Avg Words",
+                      ];
+                    }}
                   />
                   <Scatter
                     data={lengthVsQuality}
