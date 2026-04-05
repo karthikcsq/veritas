@@ -167,7 +167,7 @@ export default function StudyDetailPage() {
       label: "Avg Quality",
       value: stats ? `${Math.round(stats.averageQualityScore * 100)}%` : "\u2014",
       sub: stats?.averageSimilarityScore !== null && stats?.averageSimilarityScore !== undefined
-        ? `sim ${Math.round(stats.averageSimilarityScore * 100)}%`
+        ? `originality ${Math.round((1 - stats.averageSimilarityScore) * 100)}%`
         : "quality score",
       icon: Gauge,
       color: "text-[#5dade2]",
@@ -304,7 +304,7 @@ export default function StudyDetailPage() {
                       { label: "Effort", score: data.dimensionScores.effort ?? 0, color: "#2563eb" },
                       { label: "Consistency", score: data.dimensionScores.consistency ?? 0, color: "#059669" },
                       ...(data.dimensionScores.similarity !== null && data.dimensionScores.similarity !== undefined
-                        ? [{ label: "Similarity", score: data.dimensionScores.similarity, color: "#db2777" }]
+                        ? [{ label: "Originality", score: 1 - data.dimensionScores.similarity, color: "#db2777" }]
                         : []),
                     ]
                   : []

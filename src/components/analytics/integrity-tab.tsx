@@ -104,8 +104,8 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
   const [selected, setSelected] = useState<EnrollmentRow | null>(null);
 
   const flaggedList = enrollments.filter((e) => e.flagged || e.status === "FLAGGED");
-  const lowSimilarity = enrollments.filter(
-    (e) => e.similarityScore !== null && e.similarityScore < 0.5
+  const highSimilarity = enrollments.filter(
+    (e) => e.similarityScore !== null && e.similarityScore >= 0.7
   );
   const valid = enrollments.filter(
     (e) => e.status === "COMPLETED" && !e.flagged
@@ -143,13 +143,13 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
           <CardContent className="flex items-center justify-between px-6 pt-6 pb-6">
             <div>
               <div className="text-4xl font-bold text-orange-400 tabular-nums">
-                {lowSimilarity.length}
+                {highSimilarity.length}
               </div>
               <div className="mt-1 text-sm font-semibold text-orange-300/80">
-                Low Similarity
+                High Similarity
               </div>
               <div className="mt-1 text-xs text-orange-400/60">
-                Atypical vs. peers
+                Possibly copied responses
               </div>
             </div>
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/15">
@@ -269,7 +269,7 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
                   </div>
                   <div>
                     {e.similarityScore !== null ? (
-                      <ScoreBar value={e.similarityScore} />
+                      <ScoreBar value={e.similarityScore} invert />
                     ) : (
                       <span className="text-xs text-muted-foreground">N/A</span>
                     )}
@@ -310,7 +310,7 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
                     {" "}· Similarity:{" "}
                     <strong
                       className={
-                        selected.similarityScore < 0.5 ? "text-rose-600" : "text-emerald-600"
+                        selected.similarityScore >= 0.7 ? "text-rose-600" : "text-emerald-600"
                       }
                     >
                       {selected.similarityScore.toFixed(2)}
