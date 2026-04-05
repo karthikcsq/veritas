@@ -18,7 +18,7 @@ export async function GET(
   }
 
   const questionsResult = await pool.query(
-    'SELECT "id", "order", "type", "prompt", "options" FROM "Question" WHERE "studyId" = $1 ORDER BY "order" ASC',
+    'SELECT "id", "order", "type", "prompt", "options", "required", "config", "dependsOn" FROM "Question" WHERE "studyId" = $1 ORDER BY "order" ASC',
     [studyId]
   );
 
@@ -36,6 +36,9 @@ export async function GET(
         type: q.type,
         prompt: q.prompt,
         options: q.options,
+        required: q.required,
+        config: q.config,
+        dependsOn: q.dependsOn,
       })),
     },
   });

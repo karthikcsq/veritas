@@ -190,7 +190,7 @@ export default function SurveyPage() {
     return rootQuestions.map((root) => {
       const dependents = questions.filter(
         (q) =>
-          q.dependsOn && q.dependsOn.questionId === `order_${root.order}`
+          q.dependsOn && q.dependsOn.questionId === root.id
       );
       return { root, dependents };
     });
