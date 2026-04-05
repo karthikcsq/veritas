@@ -114,7 +114,7 @@ export async function GET(
 
   const questionStatsResult = await pool.query(
     `SELECT
-      q."id", q."order", q."type", q."prompt", q."options",
+      q."id", q."order", q."type", q."prompt", q."options", q."expectedTimeSec",
       COUNT(r."id")              AS response_count,
       AVG(r."timeSpentMs")       AS avg_time_ms,
       AVG(qs."overallScore")     AS avg_quality,
@@ -124,7 +124,7 @@ export async function GET(
       AND EXISTS (SELECT 1 FROM "Enrollment" e WHERE e."id" = r."enrollmentId" AND e."studyId" = $1)
     LEFT JOIN "QualityScore" qs ON qs."responseId" = r."id"
     WHERE q."studyId" = $1
-    GROUP BY q."id", q."order", q."type", q."prompt", q."options"
+    GROUP BY q."id", q."order", q."type", q."prompt", q."options", q."expectedTimeSec"
     ORDER BY q."order"`,
     [studyId]
   );
@@ -192,6 +192,7 @@ export async function GET(
       responseCount: parseInt(q.response_count, 10),
       totalEnrollments,
       avgTimeSec: q.avg_time_ms !== null ? Math.round(parseFloat(q.avg_time_ms) / 1000) : null,
+      expectedTimeSec: q.expectedTimeSec !== null ? parseInt(q.expectedTimeSec, 10) : null,
       avgQuality: q.avg_quality !== null ? Math.round(parseFloat(q.avg_quality) * 100) / 100 : null,
       avgSimilarity: q.avg_similarity !== null ? Math.round(parseFloat(q.avg_similarity) * 100) / 100 : null,
     })),

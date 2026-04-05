@@ -76,7 +76,7 @@ export function OverviewTab({
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-2 gap-8">
-        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <Card className="border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="px-6 pt-6">
             <CardTitle className="text-lg">Response Quality Distribution</CardTitle>
             <CardDescription>
@@ -86,14 +86,14 @@ export function OverviewTab({
           <CardContent className="px-6 pb-6">
             {hasDistribution ? (
               <div className="flex items-center gap-8">
-                <ResponsiveContainer width={200} height={200}>
+                <ResponsiveContainer width={220} height={260}>
                   <PieChart>
                     <Pie
                       data={qualityDistribution}
-                      cx={95}
-                      cy={95}
-                      innerRadius={55}
-                      outerRadius={85}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={95}
                       paddingAngle={3}
                       dataKey="value"
                     >
@@ -118,21 +118,21 @@ export function OverviewTab({
                 </div>
               </div>
             ) : (
-              <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+              <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
                 No scored responses yet
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+        <Card className="border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="px-6 pt-6">
             <CardTitle className="text-lg">Enrollment Trend</CardTitle>
             <CardDescription>Daily enrollments, completions, and flags</CardDescription>
           </CardHeader>
           <CardContent className="px-6 pb-6">
             {hasTrend ? (
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={enrollmentTrend}>
                   <defs>
                     <linearGradient id="gEnrolled" x1="0" y1="0" x2="0" y2="1">
@@ -148,9 +148,9 @@ export function OverviewTab({
                       <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="rgba(255,255,255,0.3)" />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} stroke="rgba(255,255,255,0.3)" />
                   <Tooltip />
                   <Legend iconType="circle" iconSize={8} />
                   <Area type="monotone" dataKey="enrolled" stroke="#6d28d9" fill="url(#gEnrolled)" strokeWidth={2} name="Enrolled" />
@@ -159,7 +159,7 @@ export function OverviewTab({
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+              <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
                 No enrollment data yet
               </div>
             )}
@@ -167,7 +167,7 @@ export function OverviewTab({
         </Card>
       </div>
 
-      <Card className="border-0 shadow-sm ring-1 ring-slate-200">
+      <Card className="border-0 shadow-sm ring-1 ring-white/10">
         <CardHeader className="px-6 pt-6">
           <CardTitle className="text-lg">Average Dimension Scores</CardTitle>
           <CardDescription>

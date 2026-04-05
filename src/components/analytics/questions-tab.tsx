@@ -20,6 +20,7 @@ interface QuestionStat {
   responseCount: number;
   totalEnrollments: number;
   avgTimeSec: number | null;
+  expectedTimeSec: number | null;
   avgQuality: number | null;
   avgSimilarity: number | null;
 }
@@ -83,6 +84,19 @@ export function QuestionsTab({ questionStats }: QuestionsTabProps) {
                   <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
                     <span>{q.responseCount} responses</span>
                     {q.avgTimeSec !== null && <span>Avg time: {q.avgTimeSec}s</span>}
+                    {q.expectedTimeSec !== null && (
+                      <span className="text-[#5dade2]">Expected: {q.expectedTimeSec}s</span>
+                    )}
+                    {q.avgTimeSec !== null && q.expectedTimeSec !== null && (() => {
+                      const ratio = q.avgTimeSec / q.expectedTimeSec;
+                      const color = ratio < 0.5 ? "text-rose-500" : ratio < 0.8 ? "text-amber-500" : "text-emerald-500";
+                      const label = ratio < 0.5 ? "Suspicious" : ratio < 0.8 ? "Below expected" : "Healthy";
+                      return (
+                        <span className={`font-medium ${color}`}>
+                          {label} ({Math.round(ratio * 100)}%)
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

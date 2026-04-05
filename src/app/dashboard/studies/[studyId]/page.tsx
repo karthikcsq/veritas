@@ -65,6 +65,7 @@ export type AnalyticsData = {
     responseCount: number;
     totalEnrollments: number;
     avgTimeSec: number | null;
+    expectedTimeSec: number | null;
     avgQuality: number | null;
     avgSimilarity: number | null;
   }[];

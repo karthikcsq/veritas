@@ -558,6 +558,76 @@ If the survey already has 2+ reverse pairs, return an empty newItems array.`,
 }
 
 // ---------------------------------------------------------------------------
+// Expected Time Generation — OpenAI estimates per-question thoughtful response time
+// Runs ONCE per study (on DRAFT → ACTIVE), stores in Question.expectedTimeSec
+// ---------------------------------------------------------------------------
+
+export async function generateExpectedTimes(studyId: string): Promise<{ questionId: string; expectedTimeSec: number }[]> {
+  const questionsResult = await pool.query(
+    `SELECT "id", "order", "type", "prompt", "options"
+     FROM "Question" WHERE "studyId" = $1 ORDER BY "order"`,
+    [studyId]
+  );
+  const questions = questionsResult.rows;
+  if (questions.length === 0) return [];
+
+  const questionDescriptions = questions
+    .map((q: { id: string; order: number; type: string; prompt: string; options: string[] | null }) => {
+      let desc = `[${q.id}] Order: ${q.order} | Type: ${q.type} | "${q.prompt}"`;
+      if (q.options) desc += ` | Options: ${JSON.stringify(q.options)}`;
+      return desc;
+    })
+    .join("\n");
+
+  const completion = await getOpenAI().chat.completions.create({
+    model: "gpt-5.4-mini",
+    messages: [
+      {
+        role: "user",
+        content: `You are a survey methodology expert. For each question below, estimate how many seconds a real human participant would typically take to read the question and provide a quality response.
+
+Be realistic — people read and click fast on simple questions:
+- MULTIPLE_CHOICE: scan options + click. Usually 3-10 seconds depending on number of options.
+- SCALE: glance + select a number. Usually 3-8 seconds.
+- SHORT_TEXT: read + type a brief answer. Usually 10-30 seconds.
+- LONG_TEXT: read + think + compose a detailed response. Usually 30-90 seconds depending on how much thought/specificity the question demands.
+
+These are AVERAGE times for a genuine engaged participant, not minimum or maximum.
+
+QUESTIONS:
+${questionDescriptions}
+
+Respond ONLY with valid JSON:
+{
+  "estimates": [
+    { "questionId": "the question id", "expectedTimeSec": 30, "reasoning": "brief explanation" }
+  ]
+}`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.1,
+  });
+
+  const result = JSON.parse(completion.choices[0].message.content!);
+  const estimates: { questionId: string; expectedTimeSec: number }[] = [];
+
+  const validIds = new Set(questions.map((q: { id: string }) => q.id));
+  for (const est of result.estimates ?? []) {
+    if (!validIds.has(est.questionId)) continue;
+    const time = Math.max(3, Math.min(300, Math.round(est.expectedTimeSec)));
+    estimates.push({ questionId: est.questionId, expectedTimeSec: time });
+
+    await pool.query(
+      `UPDATE "Question" SET "expectedTimeSec" = $1 WHERE "id" = $2`,
+      [time, est.questionId]
+    );
+  }
+
+  return estimates;
+}
+
+// ---------------------------------------------------------------------------
 // Specificity Analysis — compare against high-quality reference surveys
 // ---------------------------------------------------------------------------
 

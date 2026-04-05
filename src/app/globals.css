@@ -204,6 +204,16 @@
   box-shadow: 0 0 20px rgba(139,92,246,0.15);
 }
 
+/* Dark scrollbar for analytics panels */
+.dark-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+.dark-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+.dark-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.dark-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+.dark-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
 /* Button hover glow */
 button, a[role="button"], [role="tab"] {
   transition: all 0.2s ease;

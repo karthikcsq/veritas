@@ -42,12 +42,13 @@ enum StudyStatus {
 }
 
 model Question {
-  id      String       @id @default(cuid())
-  studyId String
-  order   Int
-  type    QuestionType
-  prompt  String
-  options Json?
+  id              String       @id @default(cuid())
+  studyId         String
+  order           Int
+  type            QuestionType
+  prompt          String
+  options         Json?
+  expectedTimeSec Int?
 
   study     Study      @relation(fields: [studyId], references: [id])
   responses Response[]

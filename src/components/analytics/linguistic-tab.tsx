@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -60,6 +60,7 @@ interface QuestionStat {
   responseCount: number;
   totalEnrollments: number;
   avgTimeSec: number | null;
+  expectedTimeSec: number | null;
   avgQuality: number | null;
   avgSimilarity: number | null;
 }
@@ -77,11 +78,17 @@ const DIM_LABELS: Record<string, string> = {
   similarity: "Similarity",
 };
 
-const PREVIEW_COUNT = 5;
+const CONSISTENCY_PREVIEW_COUNT = 5;
+
+/** w-24 label column + w-[52px] cells + gap-1 (4px) between cells */
+const HEATMAP_LABEL_PX = 96;
+const HEATMAP_COL_PX = 52 + 4;
 
 export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps) {
   const [heatmapExpanded, setHeatmapExpanded] = useState(false);
   const [consistencyExpanded, setConsistencyExpanded] = useState(false);
+  const heatmapScrollRef = useRef<HTMLDivElement>(null);
+  const [heatmapFitCount, setHeatmapFitCount] = useState(12);
 
   const scoredEnrollments = useMemo(
     () => enrollments.filter((e) => e.overallScore !== null),
@@ -105,10 +112,16 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
       .map((q) => ({
         q: `Q${q.order}`,
         avg: q.avgTimeSec!,
+        expected: q.expectedTimeSec,
         prompt: q.prompt,
         label: `${q.avgTimeSec}s`,
       }));
   }, [questionStats]);
+
+  const hasExpectedTimes = useMemo(
+    () => questionStats.some((q) => q.expectedTimeSec !== null),
+    [questionStats]
+  );
 
   const lengthVsQuality = useMemo(() => {
     return scoredEnrollments
@@ -128,6 +141,21 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
     }));
   }, [scoredEnrollments]);
 
+  useEffect(() => {
+    const el = heatmapScrollRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      if (w < 1) return;
+      const n = Math.max(1, Math.floor((w - HEATMAP_LABEL_PX) / HEATMAP_COL_PX));
+      setHeatmapFitCount(n);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [enrollments.length, scoredEnrollments.length]);
+
   if (enrollments.length === 0) {
     return (
       <Card className="border-0 shadow-sm ring-1 ring-white/10">
@@ -138,11 +166,15 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
     );
   }
 
-  const visibleHeatmap = heatmapExpanded ? heatmapData : heatmapData.slice(0, PREVIEW_COUNT);
-  const heatmapHasMore = heatmapData.length > PREVIEW_COUNT;
+  const visibleHeatmap = heatmapExpanded
+    ? heatmapData
+    : heatmapData.slice(0, Math.min(heatmapFitCount, heatmapData.length));
+  const heatmapHasMore = !heatmapExpanded && heatmapData.length > heatmapFitCount;
 
-  const visibleConsistency = consistencyExpanded ? consistencyData : consistencyData.slice(0, PREVIEW_COUNT);
-  const consistencyHasMore = consistencyData.length > PREVIEW_COUNT;
+  const visibleConsistency = consistencyExpanded
+    ? consistencyData
+    : consistencyData.slice(0, CONSISTENCY_PREVIEW_COUNT);
+  const consistencyHasMore = consistencyData.length > CONSISTENCY_PREVIEW_COUNT;
 
   return (
     <div className="space-y-8">
@@ -152,7 +184,9 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
           <CardHeader className="px-6 pt-6">
             <CardTitle className="text-lg">Avg Time per Question</CardTitle>
             <CardDescription>
-              Seconds — bot responses typically fall under 15s for all questions
+              {hasExpectedTimes
+                ? "Colored by comparison to AI-estimated expected time per question"
+                : "Seconds — bot responses typically fall under 15s for all questions"}
             </CardDescription>
           </CardHeader>
           <CardContent className="px-6 pb-6">
@@ -162,7 +196,7 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
               </div>
             ) : (
               <>
-                <ResponsiveContainer width="100%" height={240}>
+                <ResponsiveContainer width="100%" height={Math.max(240, timeData.length * 40)}>
                   <BarChart data={timeData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" tick={{ fontSize: 11 }} unit="s" />
@@ -173,38 +207,61 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
                       width={30}
                     />
                     <Tooltip
-                      formatter={(v: number) => [`${v}s`, "Avg Time"]}
+                      formatter={(v: number, name: string) => {
+                        const label = name === "expected" ? "Expected" : "Avg Time";
+                        return [`${v}s`, label];
+                      }}
                       labelFormatter={(label: string) => {
                         const stat = timeData.find((d) => d.q === label);
                         return stat?.prompt ?? label;
                       }}
                     />
                     <Bar dataKey="avg" name="Avg Time (s)" radius={[0, 4, 4, 0]}>
-                      {timeData.map((entry, i) => (
-                        <Cell
-                          key={i}
-                          fill={
-                            entry.avg < 20
-                              ? "#ef4444"
-                              : entry.avg < 50
-                              ? "#f59e0b"
-                              : "#2874a6"
-                          }
-                        />
-                      ))}
+                      {timeData.map((entry, i) => {
+                        let fill: string;
+                        if (entry.expected) {
+                          const ratio = entry.avg / entry.expected;
+                          fill = ratio < 0.5 ? "#ef4444" : ratio < 0.8 ? "#f59e0b" : "#2874a6";
+                        } else {
+                          fill = entry.avg < 20 ? "#ef4444" : entry.avg < 50 ? "#f59e0b" : "#2874a6";
+                        }
+                        return <Cell key={i} fill={fill} />;
+                      })}
                     </Bar>
+                    {hasExpectedTimes && (
+                      <Bar dataKey="expected" name="Expected (s)" radius={[0, 4, 4, 0]} fill="#ffffff" fillOpacity={0.15} />
+                    )}
                   </BarChart>
                 </ResponsiveContainer>
                 <div className="mt-2 flex gap-4 text-xs">
-                  <span className="flex items-center gap-1 text-rose-400">
-                    <span className="h-2 w-2 rounded-full bg-rose-500" /> &lt;20s — suspicious
-                  </span>
-                  <span className="flex items-center gap-1 text-amber-400">
-                    <span className="h-2 w-2 rounded-full bg-amber-400" /> 20–50s — borderline
-                  </span>
-                  <span className="flex items-center gap-1 text-[#3498db]">
-                    <span className="h-2 w-2 rounded-full bg-[#2874a6]" /> &gt;50s — expected
-                  </span>
+                  {hasExpectedTimes ? (
+                    <>
+                      <span className="flex items-center gap-1 text-rose-400">
+                        <span className="h-2 w-2 rounded-full bg-rose-500" /> &lt;50% of expected — suspicious
+                      </span>
+                      <span className="flex items-center gap-1 text-amber-400">
+                        <span className="h-2 w-2 rounded-full bg-amber-400" /> 50–80% — below expected
+                      </span>
+                      <span className="flex items-center gap-1 text-[#3498db]">
+                        <span className="h-2 w-2 rounded-full bg-[#2874a6]" /> &gt;80% — healthy
+                      </span>
+                      <span className="flex items-center gap-1 text-white/30">
+                        <span className="h-2 w-2 rounded-full bg-white/20" /> expected time
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-1 text-rose-400">
+                        <span className="h-2 w-2 rounded-full bg-rose-500" /> &lt;20s — suspicious
+                      </span>
+                      <span className="flex items-center gap-1 text-amber-400">
+                        <span className="h-2 w-2 rounded-full bg-amber-400" /> 20–50s — borderline
+                      </span>
+                      <span className="flex items-center gap-1 text-[#3498db]">
+                        <span className="h-2 w-2 rounded-full bg-[#2874a6]" /> &gt;50s — expected
+                      </span>
+                    </>
+                  )}
                 </div>
               </>
             )}
@@ -224,20 +281,22 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
                 No response data yet.
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={240}>
+              <ResponsiveContainer width="100%" height={Math.max(240, timeData.length * 40)}>
                 <ScatterChart
                   margin={{ top: 10, right: 20, bottom: 20, left: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.15)" />
                   <XAxis
                     dataKey="words"
                     name="Avg Words"
                     tick={{ fontSize: 11 }}
+                    stroke="rgba(255,255,255,0.3)"
                     label={{
                       value: "Avg Words",
                       position: "insideBottom",
                       offset: -10,
                       fontSize: 11,
+                      fill: "rgba(255,255,255,0.5)",
                     }}
                   />
                   <YAxis
@@ -245,14 +304,16 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
                     name="Quality"
                     domain={[0, 1]}
                     tick={{ fontSize: 11 }}
+                    stroke="rgba(255,255,255,0.3)"
                     label={{
                       value: "Quality",
                       angle: -90,
                       position: "insideLeft",
                       fontSize: 11,
+                      fill: "rgba(255,255,255,0.5)",
                     }}
                   />
-                  <ZAxis range={[50, 50]} />
+                  <ZAxis range={[80, 80]} />
                   <Tooltip
                     cursor={{ strokeDasharray: "3 3" }}
                     formatter={(v: number, name: string) => [
@@ -264,8 +325,10 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
                   />
                   <Scatter
                     data={lengthVsQuality}
-                    fill="#6d28d9"
-                    fillOpacity={0.7}
+                    fill="#8b5cf6"
+                    fillOpacity={0.85}
+                    stroke="#c4b5fd"
+                    strokeWidth={1}
                   />
                 </ScatterChart>
               </ResponsiveContainer>
@@ -291,33 +354,34 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <div className="inline-block min-w-full">
-                  <div className="mb-1 flex items-end gap-1 pl-24">
-                    {DIMENSIONS.map((dim) => (
+              <div ref={heatmapScrollRef} className="w-full min-w-0 overflow-x-auto dark-scrollbar">
+                <div className="inline-block">
+                  {/* Header row: dimension labels + enrollment IDs */}
+                  <div className="mb-1 flex items-end gap-1">
+                    <div className="w-24 shrink-0" />
+                    {visibleHeatmap.map((row) => (
                       <div
-                        key={dim}
-                        className="w-[90px] truncate px-1 text-center text-[11px] font-medium text-muted-foreground"
-                      >
-                        {DIM_LABELS[dim]}
-                      </div>
-                    ))}
-                  </div>
-                  {visibleHeatmap.map((row) => (
-                    <div key={row.fullId} className="mb-1 flex items-center gap-1">
-                      <div
-                        className="w-24 truncate pr-2 text-right font-mono text-[11px] text-muted-foreground"
+                        key={row.fullId}
+                        className="w-[52px] shrink-0 truncate text-center font-mono text-[10px] text-muted-foreground"
                         title={row.fullId}
                       >
                         {row.id}
                       </div>
-                      {DIMENSIONS.map((dim) => {
+                    ))}
+                  </div>
+                  {/* One row per dimension */}
+                  {DIMENSIONS.map((dim) => (
+                    <div key={dim} className="mb-1 flex items-center gap-1">
+                      <div className="w-24 shrink-0 truncate pr-2 text-right text-[11px] font-medium text-muted-foreground">
+                        {DIM_LABELS[dim]}
+                      </div>
+                      {visibleHeatmap.map((row) => {
                         const val = row[dim];
                         if (val === null) {
                           return (
                             <div
-                              key={dim}
-                              className="flex h-10 w-[90px] items-center justify-center rounded bg-white/10 text-[10px] text-muted-foreground"
+                              key={row.fullId}
+                              className="flex h-10 w-[52px] shrink-0 items-center justify-center rounded bg-white/10 text-[9px] text-muted-foreground"
                             >
                               n/a
                             </div>
@@ -325,8 +389,8 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
                         }
                         return (
                           <div
-                            key={dim}
-                            className="flex h-10 w-[90px] items-center justify-center rounded text-xs font-bold text-white shadow-sm transition-transform hover:scale-105"
+                            key={row.fullId}
+                            className="flex h-10 w-[52px] shrink-0 items-center justify-center rounded text-[10px] font-bold text-white shadow-sm transition-transform hover:scale-105"
                             style={{ backgroundColor: simColor(val) }}
                             title={`${row.id} — ${DIM_LABELS[dim]}: ${val.toFixed(2)}`}
                           >
@@ -352,7 +416,7 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
                 {heatmapHasMore && (
                   <button
                     onClick={() => setHeatmapExpanded((v) => !v)}
-                    className="flex items-center gap-1 text-xs font-medium text-violet-400 hover:text-violet-300 transition-colors"
+                    className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-violet-400 hover:bg-white/10 hover:text-violet-300 transition-colors"
                   >
                     {heatmapExpanded
                       ? "Show less"
@@ -432,7 +496,7 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
               {consistencyHasMore && (
                 <button
                   onClick={() => setConsistencyExpanded((v) => !v)}
-                  className="mt-3 flex items-center gap-1 text-xs font-medium text-violet-400 hover:text-violet-300 transition-colors"
+                  className="mt-3 flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-violet-400 hover:bg-white/10 hover:text-violet-300 transition-colors"
                 >
                   {consistencyExpanded
                     ? "Show less"

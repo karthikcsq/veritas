@@ -210,10 +210,10 @@ export function IntegrityTab({ enrollments }: IntegrityTabProps) {
             <span className="text-sm text-muted-foreground">Clean data only</span>
             <button
               onClick={() => setShowOnlyClean(!showOnlyClean)}
-              className={`relative h-6 w-11 rounded-full transition-colors ${showOnlyClean ? "bg-emerald-500" : "bg-slate-200"}`}
+              className={`relative h-6 w-11 rounded-full transition-colors ${showOnlyClean ? "bg-emerald-500" : "bg-white/15"}`}
             >
               <div
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${showOnlyClean ? "translate-x-5" : "translate-x-0.5"}`}
+                className={`absolute top-0.5 h-5 w-5 rounded-full shadow transition-transform ${showOnlyClean ? "bg-white translate-x-5" : "bg-white/70 translate-x-0.5"}`}
               />
             </button>
           </div>
