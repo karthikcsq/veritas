@@ -98,6 +98,8 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [redirecting, setRedirecting] = useState(false);
+
   // World ID state
   const [worldIdOpen, setWorldIdOpen] = useState(false);
   const [worldIdStarting, setWorldIdStarting] = useState(false);
@@ -171,6 +173,16 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
     setWorldIdOpen(next);
     if (!next) { rpContextRef.current = null; verifyingRef.current = false; setRpContext(null); }
   };
+
+  if (redirecting) {
+    return (
+      <div className="space-y-5 text-center py-12">
+        <Image src="/logo.png" alt="Veritas" width={44} height={44} className="mx-auto mb-3" style={{ filter: "brightness(1.4)" }} />
+        <h2 className="text-2xl font-bold text-white">Taking you to your dashboard...</h2>
+        <p className="text-sm text-white/60">Verification complete. Redirecting now.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -277,7 +289,7 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
           allow_legacy_proofs
           preset={preset}
           handleVerify={verifyOnBackend}
-          onSuccess={() => routeAfterLogin()}
+          onSuccess={() => { setRedirecting(true); routeAfterLogin(); }}
         />
       )}
     </div>
@@ -488,16 +500,16 @@ export default function Home() {
               <div className="flex items-center gap-3 opacity-0 animate-[fadeSlideUp_1.2s_ease-out_2.0s_forwards]">
                 <button
                   onClick={() => setModal("login")}
-                  className="h-9 px-5 rounded-full text-sm font-medium text-white/60 hover:text-white bg-white/5 hover:bg-white/10 backdrop-blur-xl border border-white/10 hover:border-white/20 transition-all"
+                  className="h-10 px-6 rounded-full text-sm font-medium text-black bg-white/90 hover:bg-white backdrop-blur-xl border border-white/20 shadow-lg shadow-white/5 transition-all"
                 >
-                  Log in
+                  Researcher Login
                 </button>
-                <button
-                  onClick={() => setModal("register")}
-                  className="h-9 px-5 rounded-full text-sm font-medium text-black bg-white/90 hover:bg-white backdrop-blur-xl border border-white/20 shadow-lg shadow-white/5 transition-all"
+                <Link
+                  href="/study"
+                  className="h-10 px-6 rounded-full text-sm font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 backdrop-blur-xl border border-white/10 hover:border-white/20 transition-all inline-flex items-center"
                 >
-                  Get Started
-                </button>
+                  Browse Studies
+                </Link>
               </div>
             </div>
           </div>
