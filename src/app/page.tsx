@@ -493,10 +493,10 @@ export default function Home() {
                   Researcher Login
                 </button>
                 <Link
-                  href="/study"
+                  href="/study/login"
                   className="h-10 px-6 rounded-full text-sm font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 backdrop-blur-xl border border-white/10 hover:border-white/20 transition-all inline-flex items-center"
                 >
-                  Browse Studies
+                  Participant Login
                 </Link>
               </div>
             </div>

@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  IDKitRequestWidget,
-  orbLegacy,
-  type IDKitResult,
-  type RpContext,
-} from "@worldcoin/idkit";
-import { useCallback, useRef, useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -22,38 +16,8 @@ interface PublicStudy {
   worldIdAction: string;
 }
 
-const DEFAULT_APP_ID = process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}` | undefined;
-const IS_DEV = process.env.NODE_ENV !== "production";
-
 function enrollmentKey(studyId: string) {
   return `veritas_enrollment_${studyId}`;
-}
-
-async function getRpContext(action: string): Promise<{ rp_id: string } & RpContext> {
-  const res = await fetch("/api/world-id/rp-signature", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(
-      typeof err === "object" && err && "error" in err
-        ? String((err as { error: string }).error)
-        : "Failed to get RP signature",
-    );
-  }
-
-  const rpSig = await res.json();
-
-  return {
-    rp_id: rpSig.rp_id,
-    nonce: rpSig.nonce,
-    created_at: rpSig.created_at,
-    expires_at: rpSig.expires_at,
-    signature: rpSig.sig,
-  };
 }
 
 export default function StudyEnrollPage() {
@@ -64,108 +28,67 @@ export default function StudyEnrollPage() {
   const [study, setStudy] = useState<PublicStudy | null>(null);
   const [loadingStudy, setLoadingStudy] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [enrollmentId, setEnrollmentId] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const rpContextRef = useRef<RpContext | null>(null);
-  const [rpContext, setRpContext] = useState<RpContext | null>(null);
-  const enrollmentIdRef = useRef<string | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
 
-  const preset = useMemo(() => orbLegacy(), []);
+  // Auth gate — redirect to login if no participant session
+  useEffect(() => {
+    const stored = localStorage.getItem("veritas_participant");
+    if (!stored) {
+      router.replace(`/study/login?redirect=/study/${studyId}`);
+    }
+  }, [router, studyId]);
 
+  // Restore existing enrollment from localStorage
   useEffect(() => {
     const stored = localStorage.getItem(enrollmentKey(studyId));
-    if (stored) {
-      setEnrollmentId(stored);
-      return;
-    }
-
-    if (IS_DEV) {
-      fetch(`/api/studies/${studyId}/dev-enroll`, { method: "POST" })
-        .then((res) => (res.ok ? res.json() : Promise.reject()))
-        .then((data: { enrollmentId: string }) => {
-          localStorage.setItem(enrollmentKey(studyId), data.enrollmentId);
-          setEnrollmentId(data.enrollmentId);
-        })
-        .catch(() => {});
-    }
+    if (stored) setEnrollmentId(stored);
   }, [studyId]);
 
+  // Load study details
   useEffect(() => {
-    async function loadStudy() {
-      try {
-        const response = await fetch(`/api/studies/${studyId}/public`);
-        if (!response.ok) throw new Error("Failed to load study");
-        const payload = (await response.json()) as { study: PublicStudy };
-        setStudy(payload.study);
-      } catch (err) {
-        console.error(err);
-        setError("Could not load this study.");
-      } finally {
-        setLoadingStudy(false);
-      }
-    }
-
-    if (studyId) void loadStudy();
+    if (!studyId) return;
+    fetch(`/api/studies/${studyId}/public`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load study");
+        return res.json();
+      })
+      .then((payload: { study: PublicStudy }) => setStudy(payload.study))
+      .catch(() => setError("Could not load this study."))
+      .finally(() => setLoadingStudy(false));
   }, [studyId]);
 
-  const verifyOnBackend = useCallback(
-    async (result: IDKitResult) => {
-      const response = await fetch(`/api/studies/${studyId}/enroll`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idkitResponse: result }),
-      });
+  async function handleEnroll() {
+    const raw = localStorage.getItem("veritas_participant");
+    if (!raw) { router.replace(`/study/login?redirect=/study/${studyId}`); return; }
+    const { participantId } = JSON.parse(raw) as { participantId: string };
 
-      if (!response.ok) throw new Error("Backend verification failed");
-
-      const data = await response.json();
-      enrollmentIdRef.current = data.enrollmentId;
-    },
-    [studyId],
-  );
-
-  const startVerification = async () => {
-    if (!study || !DEFAULT_APP_ID) return;
-
-    setStarting(true);
+    setEnrolling(true);
     setError(null);
-
     try {
-      const ctx = await getRpContext(study.worldIdAction);
-      rpContextRef.current = ctx;
-      setRpContext(ctx);
-      setOpen(true);
-    } catch (e) {
-      console.error(e);
-      rpContextRef.current = null;
-      setRpContext(null);
-      setError("Failed to start verification. Please try again.");
+      const res = await fetch(`/api/studies/${studyId}/participant-enroll`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantId }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError((data as { error?: string }).error ?? "Enrollment failed");
+        return;
+      }
+      const data = await res.json() as { enrollmentId: string };
+      localStorage.setItem(enrollmentKey(studyId), data.enrollmentId);
+      setEnrollmentId(data.enrollmentId);
+    } catch {
+      setError("Something went wrong. Please try again.");
     } finally {
-      setStarting(false);
+      setEnrolling(false);
     }
-  };
+  }
 
-  const handleVerificationSuccess = () => {
-    const eid = enrollmentIdRef.current;
-    if (eid) {
-      localStorage.setItem(enrollmentKey(studyId), eid);
-      setEnrollmentId(eid);
-    }
-  };
-
-  const handleStartSurvey = () => {
+  function handleStartSurvey() {
     router.push(`/study/${studyId}/survey?enrollmentId=${enrollmentId}`);
-  };
-
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      rpContextRef.current = null;
-      setRpContext(null);
-    }
-  };
+  }
 
   if (loadingStudy) {
     return (
@@ -189,24 +112,27 @@ export default function StudyEnrollPage() {
     <div className="flex-1 flex items-center justify-center px-4 py-8">
       <Card className="w-full max-w-lg">
         <CardHeader className="text-center">
-          <Image src="/logo.png" alt="Veritas" width={44} height={44} className="mx-auto mb-2" style={{ filter: "brightness(1.4)" }} />
+          <Image
+            src="/logo.png"
+            alt="Veritas"
+            width={44}
+            height={44}
+            className="mx-auto mb-2"
+            style={{ filter: "brightness(1.4)" }}
+          />
           <CardTitle className="text-2xl">{study.title}</CardTitle>
-          <CardDescription className="mt-2">
-            {study.description}
-          </CardDescription>
+          <CardDescription className="mt-2">{study.description}</CardDescription>
         </CardHeader>
+
         <CardContent className="space-y-6">
+          {/* Stats */}
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-lg border p-4 text-center">
-              <div className="text-2xl font-bold">
-                ${study.compensationUsd}
-              </div>
+              <div className="text-2xl font-bold">${study.compensationUsd}</div>
               <div className="text-sm text-muted-foreground">Compensation</div>
             </div>
             <div className="rounded-lg border p-4 text-center">
-              <div className="text-2xl font-bold">
-                {study.questionCount}
-              </div>
+              <div className="text-2xl font-bold">{study.questionCount}</div>
               <div className="text-sm text-muted-foreground">Questions</div>
             </div>
           </div>
@@ -215,11 +141,10 @@ export default function StudyEnrollPage() {
             <>
               <div className="rounded-lg border border-dashed p-4 space-y-2">
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">Verified</Badge>
+                  <Badge variant="secondary">Enrolled</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  You&apos;ve been verified with World ID. You can now begin the
-                  survey.
+                  You are enrolled in this study. Click below to begin.
                 </p>
               </div>
               <Button size="lg" className="w-full" onClick={handleStartSurvey}>
@@ -230,42 +155,27 @@ export default function StudyEnrollPage() {
             <>
               <div className="rounded-lg border border-dashed p-4 space-y-2">
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline">World ID Required</Badge>
+                  <Badge variant="outline">Not Enrolled</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  This study uses World ID to verify that each participant is a
-                  unique real person. Your identity remains completely
-                  anonymous — no personal information is stored.
+                  You are verified as a unique participant. Click below to enroll
+                  and begin this study.
                 </p>
               </div>
               <Button
                 size="lg"
                 className="w-full"
-                onClick={startVerification}
-                disabled={starting}
+                onClick={handleEnroll}
+                disabled={enrolling}
               >
-                {starting ? "Preparing…" : "Verify with World ID"}
+                {enrolling ? "Enrolling..." : "Enroll in Study"}
               </Button>
             </>
           )}
 
-          {error ? (
+          {error && (
             <p className="text-sm text-center text-destructive">{error}</p>
-          ) : null}
-
-          {DEFAULT_APP_ID && rpContext && study ? (
-            <IDKitRequestWidget
-              open={open}
-              onOpenChange={onOpenChange}
-              app_id={DEFAULT_APP_ID}
-              action={study.worldIdAction}
-              rp_context={rpContext}
-              allow_legacy_proofs
-              preset={preset}
-              handleVerify={verifyOnBackend}
-              onSuccess={handleVerificationSuccess}
-            />
-          ) : null}
+          )}
 
           <p className="text-xs text-center text-muted-foreground">
             By enrolling, you agree to answer all questions honestly. Your
