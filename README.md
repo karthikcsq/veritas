@@ -20,19 +20,18 @@
 
 ## The Problem
 
-Online clinical research faces two critical threats to data integrity:
+The global clinical trials market is worth over $80 billion. A single failed Phase III trial costs around $350 million. An estimated 4% of trial volunteers are "professional patients" who fabricate or exaggerate symptoms for compensation, and a Nature investigation found that up to one quarter of clinical trials in some fields may be problematic or entirely fabricated.
 
-1. **Fake enrollments** — organized groups enroll multiple times under different identities, inflating sample sizes with duplicate participants
-2. **Low-quality responses** — participants rush through surveys, contradict themselves, or provide generic answers that compromise research validity
+A Harvard research team caught ten fake HIV patients in their trial. People were wearing wigs on video calls to avoid being recognized from previous sign-ups. A separate Alzheimer's study lost 40% of its data to participants who didn't have Alzheimer's.
 
-Traditional solutions (CAPTCHAs, email verification, manual review) are either easily bypassed or don't scale.
+The best fraud prevention tool most researchers have today is an attention check question: "Select Strongly Agree to prove you're reading this."
 
 ## The Solution
 
-Veritas combines **World ID zero-knowledge proof-of-personhood** with a **multi-dimensional AI quality scoring pipeline** to give researchers genuine confidence in their data.
+Veritas combines **World ID proof-of-personhood** with a **multi-dimensional AI quality scoring pipeline** to give researchers clean, trustworthy data.
 
-- Each participant proves they are a unique human — mathematically, not through policy
-- Every response is scored across coherence, effort, consistency, and specificity in real-time
+- Each participant cryptographically proves they are a unique human before answering a single question
+- Every response is scored across coherence, effort, consistency, and specificity
 - Researchers see per-enrollment quality breakdowns in a live analytics dashboard
 
 ---
@@ -41,24 +40,24 @@ Veritas combines **World ID zero-knowledge proof-of-personhood** with a **multi-
 
 ### For Researchers
 
-- **Study Builder** — create surveys with 5 question types (scale, multiple choice, checkbox, short text, long text), conditional logic, and dependency chains
-- **AI Question Analysis** — automatic specificity scoring compares your questions against validated clinical instruments (PHQ-9, GAD-7, BPI) and suggests improvements
-- **Reverse-Scored Pair Detection** — automatically identifies psychometric reverse pairs when a study is published, enabling contradiction detection without manual tagging
-- **Live Analytics Dashboard** — 6 specialized tabs:
+- **Study Builder**: create surveys with 5 question types (scale, multiple choice, checkbox, short text, long text), conditional logic, and dependency chains
+- **AI Question Analysis**: automatic specificity scoring compares your questions against validated clinical instruments (PHQ-9, GAD-7, BPI) and suggests improvements
+- **Reverse-Scored Pair Detection**: automatically identifies psychometric reverse pairs when a study is published, enabling contradiction detection without manual tagging
+- **Live Analytics Dashboard**: 6 specialized tabs:
   - **Overview**: quality distribution, enrollment trends, dimension score gauges
   - **Integrity**: per-enrollment scores with drill-down into individual responses
   - **Linguistic**: text analysis of response content and patterns
   - **Behavior**: response timing analysis and suspicious speed flags
   - **Questions**: per-question metrics, response rates, and quality breakdown
   - **Geographic**: participant distribution
-- **Study Lifecycle** — Draft → Active → Closed with one-click transitions
+- **Study Lifecycle**: Draft → Active → Closed with one-click transitions
 
 ### For Participants
 
-- **World ID Verification** — prove you're a unique human with a single scan, no personal information stored
-- **Clean Survey Experience** — one question at a time with progress tracking and automatic time measurement
-- **Real-Time Validity Feedback** — gentle nudges when an answer doesn't address the question, with the option to keep your response
-- **Compensation Tracking** — clear visibility into study compensation and completion status
+- **World ID Verification**: prove you're a unique human with a single scan, no personal information stored
+- **Clean Survey Experience**: one question at a time with progress tracking and automatic time measurement
+- **Real-Time Validity Feedback**: nudges when an answer doesn't address the question, with the option to keep your response
+- **Compensation Tracking**: clear visibility into study compensation and completion status
 
 ---
 
@@ -86,8 +85,8 @@ Submission → LLM Quality Scoring → Similarity Analysis → Structured Analys
 - GPT-4o scores semantic similarity to detect copied or templated answers
 
 **Stage 3: Structured Analysis** (pure math, no LLM)
-- **Response time scoring** — calculates expected reading + answering time per question type, flags suspiciously fast completions
-- **Reverse-pair contradiction detection** — checks if both items in a reverse-scored pair received the same polarity (both high or both low)
+- **Response time scoring**: calculates expected reading + answering time per question type, flags suspiciously fast completions
+- **Reverse-pair contradiction detection**: checks if both items in a reverse-scored pair received the same polarity (both high or both low)
 
 **Final Score**: 50% average LLM scores + 50% structured analysis. Enrollments scoring below 0.5 are automatically flagged.
 
@@ -100,7 +99,7 @@ Participant → World ID Orb Scan → ZK Proof Generated → Backend Verificatio
 - Each study has a unique action string (`study_enrollment_{id}`)
 - The nullifier hash is globally unique per person per action
 - A person can enroll in multiple studies but **never the same study twice**
-- Enforced cryptographically, not by policy
+- Enforced cryptographically
 
 ---
 
@@ -208,7 +207,7 @@ For quick testing without World ID:
 
 ## Database
 
-All database operations use raw SQL via the `pg` driver. The `prisma/schema.prisma` file exists as a **schema reference only** — Prisma ORM is not used. Migrations are applied directly via Supabase.
+All database operations use raw SQL via the `pg` driver. The `prisma/schema.prisma` file exists as a **schema reference only**. Prisma ORM is not used. Migrations are applied directly via Supabase.
 
 ### Core Tables
 
