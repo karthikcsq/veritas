@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -13,6 +14,7 @@ import {
   ZAxis,
   Cell,
 } from "recharts";
+import { ChevronDown } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -21,154 +23,131 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-const QUESTIONS = [
-  "Q1: Pain Level",
-  "Q2: Daily Impact",
-  "Q3: Treatments",
-  "Q4: Medication Exp.",
-  "Q5: Biggest Challenge",
-];
-
-// Pairwise cosine similarity between avg responses per question
-const SIMILARITY_MATRIX = [
-  [1.0, 0.43, 0.28, 0.51, 0.37],
-  [0.43, 1.0, 0.61, 0.44, 0.72],
-  [0.28, 0.61, 1.0, 0.38, 0.55],
-  [0.51, 0.44, 0.38, 1.0, 0.49],
-  [0.37, 0.72, 0.55, 0.49, 1.0],
-];
-
-const TIME_DATA = [
-  { q: "Q1", avg: 12, label: "12s" },
-  { q: "Q2", avg: 145, label: "145s" },
-  { q: "Q3", avg: 22, label: "22s" },
-  { q: "Q4", avg: 98, label: "98s" },
-  { q: "Q5", avg: 67, label: "67s" },
-];
-
-const LENGTH_VS_QUALITY = [
-  { words: 12, quality: 0.32 },
-  { words: 48, quality: 0.41 },
-  { words: 156, quality: 0.91 },
-  { words: 203, quality: 0.88 },
-  { words: 87, quality: 0.72 },
-  { words: 334, quality: 0.93 },
-  { words: 244, quality: 0.84 },
-  { words: 67, quality: 0.77 },
-  { words: 189, quality: 0.79 },
-  { words: 278, quality: 0.86 },
-  { words: 15, quality: 0.28 },
-  { words: 134, quality: 0.78 },
-];
-
-const CONSISTENCY_DATA = [
-  { id: "e-4f2a", score: 0.94, flag: null },
-  { id: "e-7b1c", score: 0.87, flag: null },
-  {
-    id: "e-2d9e",
-    score: 0.31,
-    flag: "Q2 contradicts Q4: claims minimal impact but later describes inability to work or leave the house",
-  },
-  { id: "e-8c3f", score: 0.92, flag: null },
-  {
-    id: "e-1a5b",
-    score: 0.28,
-    flag: "Q1 (pain: 3/10) inconsistent with Q2 which describes severe daily disability preventing basic tasks",
-  },
-  { id: "e-6e7d", score: 0.96, flag: null },
-  { id: "e-3f8a", score: 0.78, flag: null },
-  {
-    id: "e-9g2h",
-    score: 0.44,
-    flag: "Q3 states never used medication; Q4 describes a detailed years-long opioid prescription history",
-  },
-  { id: "e-5h4i", score: 0.89, flag: null },
-  { id: "e-0i6j", score: 0.83, flag: null },
-];
-
 function simColor(v: number): string {
-  // Red (low) → yellow → green (high)
   const r = Math.round(239 * (1 - v) + 16 * v);
   const g = Math.round(68 * (1 - v * 1.2) + 185 * v);
   const b = Math.round(68 * (1 - v));
   return `rgb(${Math.max(0, Math.min(255, r))}, ${Math.max(0, Math.min(255, g))}, ${Math.max(0, Math.min(255, b))})`;
 }
 
-interface LinguisticTabProps {
-  enrollments: any[];
-  questionStats: any[];
+interface Enrollment {
+  id: string;
+  status: string;
+  overallScore: number | null;
+  coherenceScore: number | null;
+  effortScore: number | null;
+  consistencyScore: number | null;
+  similarityScore: number | null;
+  flagged: boolean;
+  flagReason: string | null;
+  similarityReason: string | null;
+  responses: {
+    questionId: string;
+    questionPrompt: string;
+    questionType: string;
+    value: string;
+    timeSpentMs: number | null;
+    wordCount: number;
+  }[];
 }
 
+interface QuestionStat {
+  questionId: string;
+  order: number;
+  type: string;
+  prompt: string;
+  options: string[] | null;
+  responseCount: number;
+  totalEnrollments: number;
+  avgTimeSec: number | null;
+  avgQuality: number | null;
+  avgSimilarity: number | null;
+}
+
+interface LinguisticTabProps {
+  enrollments: Enrollment[];
+  questionStats: QuestionStat[];
+}
+
+const DIMENSIONS = ["coherence", "effort", "consistency", "similarity"] as const;
+const DIM_LABELS: Record<string, string> = {
+  coherence: "Coherence",
+  effort: "Effort",
+  consistency: "Consistency",
+  similarity: "Similarity",
+};
+
+const PREVIEW_COUNT = 5;
+
 export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps) {
-  return (
-    <div className="space-y-8">
-      {/* Similarity matrix */}
+  const [heatmapExpanded, setHeatmapExpanded] = useState(false);
+  const [consistencyExpanded, setConsistencyExpanded] = useState(false);
+
+  const scoredEnrollments = useMemo(
+    () => enrollments.filter((e) => e.overallScore !== null),
+    [enrollments]
+  );
+
+  const heatmapData = useMemo(() => {
+    return scoredEnrollments.slice(0, 30).map((e) => ({
+      id: e.id.slice(0, 8),
+      fullId: e.id,
+      coherence: e.coherenceScore ?? 0,
+      effort: e.effortScore ?? 0,
+      consistency: e.consistencyScore ?? 0,
+      similarity: e.similarityScore ?? null,
+    }));
+  }, [scoredEnrollments]);
+
+  const timeData = useMemo(() => {
+    return questionStats
+      .filter((q) => q.avgTimeSec !== null)
+      .map((q) => ({
+        q: `Q${q.order}`,
+        avg: q.avgTimeSec!,
+        prompt: q.prompt,
+        label: `${q.avgTimeSec}s`,
+      }));
+  }, [questionStats]);
+
+  const lengthVsQuality = useMemo(() => {
+    return scoredEnrollments
+      .filter((e) => e.responses.length > 0)
+      .map((e) => {
+        const totalWords = e.responses.reduce((sum, r) => sum + r.wordCount, 0);
+        const avgWords = Math.round(totalWords / e.responses.length);
+        return { words: avgWords, quality: e.overallScore ?? 0 };
+      });
+  }, [scoredEnrollments]);
+
+  const consistencyData = useMemo(() => {
+    return scoredEnrollments.map((e) => ({
+      id: e.id.slice(0, 8),
+      score: e.consistencyScore ?? 0,
+      flag: e.flagged ? e.flagReason : null,
+    }));
+  }, [scoredEnrollments]);
+
+  if (enrollments.length === 0) {
+    return (
       <Card className="border-0 shadow-sm ring-1 ring-white/10">
-        <CardHeader className="px-6 pt-6">
-          <CardTitle className="text-lg">Answer Similarity Matrix</CardTitle>
-          <CardDescription>
-            Pairwise semantic similarity between responses across questions
-            (embedding cosine similarity). Scores below{" "}
-            <span className="font-semibold text-rose-400">0.35</span> between
-            non-identical questions may indicate contradictions or topic drift.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-6 pb-6">
-          <div className="overflow-x-auto">
-            <div className="inline-block min-w-full">
-              {/* Column headers */}
-              <div className="mb-1 flex items-end gap-1 pl-36">
-                {QUESTIONS.map((q, i) => (
-                  <div
-                    key={i}
-                    className="w-[72px] truncate px-1 text-center text-[11px] text-muted-foreground"
-                    title={q}
-                  >
-                    {q}
-                  </div>
-                ))}
-              </div>
-              {/* Matrix rows */}
-              {SIMILARITY_MATRIX.map((row, i) => (
-                <div key={i} className="mb-1 flex items-center gap-1">
-                  <div
-                    className="w-36 truncate pr-2 text-right text-[11px] text-muted-foreground"
-                    title={QUESTIONS[i]}
-                  >
-                    {QUESTIONS[i]}
-                  </div>
-                  {row.map((val, j) => (
-                    <div
-                      key={j}
-                      className="flex h-12 w-[72px] items-center justify-center rounded text-xs font-bold text-white shadow-sm transition-transform hover:scale-105"
-                      style={{ backgroundColor: simColor(val) }}
-                      title={`${QUESTIONS[i]} × ${QUESTIONS[j]}: ${val.toFixed(2)}`}
-                    >
-                      {val.toFixed(2)}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
-            <div
-              className="h-3 w-24 rounded"
-              style={{
-                background:
-                  "linear-gradient(to right, rgb(239,68,68), rgb(250,204,21), rgb(16,185,129))",
-              }}
-            />
-            <span>Low → High similarity</span>
-            <span className="ml-2 rounded bg-rose-50 px-2 py-0.5 text-rose-400">
-              Q1 × Q3 = 0.28 — low overlap expected (scale vs. treatments)
-            </span>
-          </div>
+        <CardContent className="flex items-center justify-center py-20 text-muted-foreground">
+          No enrollment data yet. Linguistic analysis will appear once participants complete the survey.
         </CardContent>
       </Card>
+    );
+  }
 
+  const visibleHeatmap = heatmapExpanded ? heatmapData : heatmapData.slice(0, PREVIEW_COUNT);
+  const heatmapHasMore = heatmapData.length > PREVIEW_COUNT;
+
+  const visibleConsistency = consistencyExpanded ? consistencyData : consistencyData.slice(0, PREVIEW_COUNT);
+  const consistencyHasMore = consistencyData.length > PREVIEW_COUNT;
+
+  return (
+    <div className="space-y-8">
+      {/* Charts row — always visible, compact */}
       <div className="grid grid-cols-2 gap-8">
-        {/* Time spent per question */}
         <Card className="border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="px-6 pt-6">
             <CardTitle className="text-lg">Avg Time per Question</CardTitle>
@@ -177,48 +156,61 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
             </CardDescription>
           </CardHeader>
           <CardContent className="px-6 pb-6">
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={TIME_DATA} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11 }} unit="s" />
-                <YAxis
-                  dataKey="q"
-                  type="category"
-                  tick={{ fontSize: 12 }}
-                  width={24}
-                />
-                <Tooltip formatter={(v) => [`${v}s`, "Avg Time"]} />
-                <Bar dataKey="avg" name="Avg Time (s)" radius={[0, 4, 4, 0]}>
-                  {TIME_DATA.map((entry, i) => (
-                    <Cell
-                      key={i}
-                      fill={
-                        entry.avg < 20
-                          ? "#ef4444"
-                          : entry.avg < 50
-                          ? "#f59e0b"
-                          : "#6d28d9"
-                      }
+            {timeData.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No response time data yet.
+              </div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={timeData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} unit="s" />
+                    <YAxis
+                      dataKey="q"
+                      type="category"
+                      tick={{ fontSize: 12 }}
+                      width={30}
                     />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-            <div className="mt-2 flex gap-4 text-xs">
-              <span className="flex items-center gap-1 text-rose-400">
-                <span className="h-2 w-2 rounded-full bg-rose-500" /> &lt;20s — suspicious
-              </span>
-              <span className="flex items-center gap-1 text-amber-400">
-                <span className="h-2 w-2 rounded-full bg-amber-400" /> 20–50s — borderline
-              </span>
-              <span className="flex items-center gap-1 text-[#3498db]">
-                <span className="h-2 w-2 rounded-full bg-[#2874a6]" /> &gt;50s — expected
-              </span>
-            </div>
+                    <Tooltip
+                      formatter={(v: number) => [`${v}s`, "Avg Time"]}
+                      labelFormatter={(label: string) => {
+                        const stat = timeData.find((d) => d.q === label);
+                        return stat?.prompt ?? label;
+                      }}
+                    />
+                    <Bar dataKey="avg" name="Avg Time (s)" radius={[0, 4, 4, 0]}>
+                      {timeData.map((entry, i) => (
+                        <Cell
+                          key={i}
+                          fill={
+                            entry.avg < 20
+                              ? "#ef4444"
+                              : entry.avg < 50
+                              ? "#f59e0b"
+                              : "#2874a6"
+                          }
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="mt-2 flex gap-4 text-xs">
+                  <span className="flex items-center gap-1 text-rose-400">
+                    <span className="h-2 w-2 rounded-full bg-rose-500" /> &lt;20s — suspicious
+                  </span>
+                  <span className="flex items-center gap-1 text-amber-400">
+                    <span className="h-2 w-2 rounded-full bg-amber-400" /> 20–50s — borderline
+                  </span>
+                  <span className="flex items-center gap-1 text-[#3498db]">
+                    <span className="h-2 w-2 rounded-full bg-[#2874a6]" /> &gt;50s — expected
+                  </span>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
-        {/* Response length vs quality */}
         <Card className="border-0 shadow-sm ring-1 ring-white/10">
           <CardHeader className="px-6 pt-6">
             <CardTitle className="text-lg">Response Length vs. Quality</CardTitle>
@@ -227,56 +219,156 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
             </CardDescription>
           </CardHeader>
           <CardContent className="px-6 pb-6">
-            <ResponsiveContainer width="100%" height={240}>
-              <ScatterChart
-                margin={{ top: 10, right: 20, bottom: 20, left: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="words"
-                  name="Avg Words"
-                  tick={{ fontSize: 11 }}
-                  label={{
-                    value: "Avg Words",
-                    position: "insideBottom",
-                    offset: -10,
-                    fontSize: 11,
-                  }}
-                />
-                <YAxis
-                  dataKey="quality"
-                  name="Quality"
-                  domain={[0, 1]}
-                  tick={{ fontSize: 11 }}
-                  label={{
-                    value: "Quality",
-                    angle: -90,
-                    position: "insideLeft",
-                    fontSize: 11,
-                  }}
-                />
-                <ZAxis range={[50, 50]} />
-                <Tooltip
-                  cursor={{ strokeDasharray: "3 3" }}
-                  formatter={(v, name) => [
-                    name === "quality"
-                      ? (v as number).toFixed(2)
-                      : `${v} words`,
-                    name === "quality" ? "Quality Score" : "Avg Words",
-                  ]}
-                />
-                <Scatter
-                  data={LENGTH_VS_QUALITY}
-                  fill="#6d28d9"
-                  fillOpacity={0.7}
-                />
-              </ScatterChart>
-            </ResponsiveContainer>
+            {lengthVsQuality.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No response data yet.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <ScatterChart
+                  margin={{ top: 10, right: 20, bottom: 20, left: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="words"
+                    name="Avg Words"
+                    tick={{ fontSize: 11 }}
+                    label={{
+                      value: "Avg Words",
+                      position: "insideBottom",
+                      offset: -10,
+                      fontSize: 11,
+                    }}
+                  />
+                  <YAxis
+                    dataKey="quality"
+                    name="Quality"
+                    domain={[0, 1]}
+                    tick={{ fontSize: 11 }}
+                    label={{
+                      value: "Quality",
+                      angle: -90,
+                      position: "insideLeft",
+                      fontSize: 11,
+                    }}
+                  />
+                  <ZAxis range={[50, 50]} />
+                  <Tooltip
+                    cursor={{ strokeDasharray: "3 3" }}
+                    formatter={(v: number, name: string) => [
+                      name === "quality"
+                        ? v.toFixed(2)
+                        : `${v} words`,
+                      name === "quality" ? "Quality Score" : "Avg Words",
+                    ]}
+                  />
+                  <Scatter
+                    data={lengthVsQuality}
+                    fill="#6d28d9"
+                    fillOpacity={0.7}
+                  />
+                </ScatterChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Consistency scores */}
+      {/* Quality dimension heatmap — collapsible */}
+      <Card className="border-0 shadow-sm ring-1 ring-white/10">
+        <CardHeader className="px-6 pt-6">
+          <CardTitle className="text-lg">Quality Dimension Heatmap</CardTitle>
+          <CardDescription>
+            Per-enrollment scores across quality dimensions. Scores below{" "}
+            <span className="font-semibold text-rose-400">0.40</span> indicate
+            potential quality issues in that dimension.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-6 pb-6">
+          {heatmapData.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No scored enrollments yet.
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <div className="inline-block min-w-full">
+                  <div className="mb-1 flex items-end gap-1 pl-24">
+                    {DIMENSIONS.map((dim) => (
+                      <div
+                        key={dim}
+                        className="w-[90px] truncate px-1 text-center text-[11px] font-medium text-muted-foreground"
+                      >
+                        {DIM_LABELS[dim]}
+                      </div>
+                    ))}
+                  </div>
+                  {visibleHeatmap.map((row) => (
+                    <div key={row.fullId} className="mb-1 flex items-center gap-1">
+                      <div
+                        className="w-24 truncate pr-2 text-right font-mono text-[11px] text-muted-foreground"
+                        title={row.fullId}
+                      >
+                        {row.id}
+                      </div>
+                      {DIMENSIONS.map((dim) => {
+                        const val = row[dim];
+                        if (val === null) {
+                          return (
+                            <div
+                              key={dim}
+                              className="flex h-10 w-[90px] items-center justify-center rounded bg-white/10 text-[10px] text-muted-foreground"
+                            >
+                              n/a
+                            </div>
+                          );
+                        }
+                        return (
+                          <div
+                            key={dim}
+                            className="flex h-10 w-[90px] items-center justify-center rounded text-xs font-bold text-white shadow-sm transition-transform hover:scale-105"
+                            style={{ backgroundColor: simColor(val) }}
+                            title={`${row.id} — ${DIM_LABELS[dim]}: ${val.toFixed(2)}`}
+                          >
+                            {val.toFixed(2)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <div
+                    className="h-3 w-24 rounded"
+                    style={{
+                      background:
+                        "linear-gradient(to right, rgb(239,68,68), rgb(250,204,21), rgb(16,185,129))",
+                    }}
+                  />
+                  <span>Low → High score</span>
+                </div>
+                {heatmapHasMore && (
+                  <button
+                    onClick={() => setHeatmapExpanded((v) => !v)}
+                    className="flex items-center gap-1 text-xs font-medium text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    {heatmapExpanded
+                      ? "Show less"
+                      : `Show all ${heatmapData.length} enrollments`}
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform ${heatmapExpanded ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Consistency scores — collapsible */}
       <Card className="border-0 shadow-sm ring-1 ring-white/10">
         <CardHeader className="px-6 pt-6">
           <CardTitle className="text-lg">Semantic Consistency Scores</CardTitle>
@@ -286,51 +378,72 @@ export function LinguisticTab({ enrollments, questionStats }: LinguisticTabProps
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6">
-          <div className="space-y-0">
-            {CONSISTENCY_DATA.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center gap-4 border-b py-3.5 last:border-0"
-              >
-                <div className="w-16 font-mono text-xs text-muted-foreground">
-                  {p.id}
-                </div>
-                <div className="flex-1">
-                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        p.score >= 0.7
-                          ? "bg-emerald-500"
-                          : p.score >= 0.5
-                          ? "bg-amber-400"
-                          : "bg-rose-500"
-                      }`}
-                      style={{ width: `${p.score * 100}%` }}
-                    />
-                  </div>
-                </div>
-                <div
-                  className={`w-10 text-right text-sm font-bold tabular-nums ${
-                    p.score >= 0.7
-                      ? "text-emerald-400"
-                      : p.score >= 0.5
-                      ? "text-amber-400"
-                      : "text-rose-400"
-                  }`}
-                >
-                  {p.score.toFixed(2)}
-                </div>
-                {p.flag && (
+          {consistencyData.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No consistency data yet.
+            </div>
+          ) : (
+            <>
+              <div className="space-y-0">
+                {visibleConsistency.map((p) => (
                   <div
-                    className="max-w-xs truncate text-xs text-rose-400"
-                    title={p.flag}
+                    key={p.id}
+                    className="flex items-center gap-4 border-b py-3.5 last:border-0"
                   >
-                    ⚠ {p.flag}
+                    <div className="w-16 font-mono text-xs text-muted-foreground">
+                      {p.id}
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            p.score >= 0.7
+                              ? "bg-emerald-500"
+                              : p.score >= 0.5
+                              ? "bg-amber-400"
+                              : "bg-rose-500"
+                          }`}
+                          style={{ width: `${p.score * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div
+                      className={`w-10 text-right text-sm font-bold tabular-nums ${
+                        p.score >= 0.7
+                          ? "text-emerald-400"
+                          : p.score >= 0.5
+                          ? "text-amber-400"
+                          : "text-rose-400"
+                      }`}
+                    >
+                      {p.score.toFixed(2)}
+                    </div>
+                    {p.flag && (
+                      <div
+                        className="max-w-xs truncate text-xs text-rose-400"
+                        title={p.flag}
+                      >
+                        ⚠ {p.flag}
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
               </div>
-            ))}
-          </div>
+              {consistencyHasMore && (
+                <button
+                  onClick={() => setConsistencyExpanded((v) => !v)}
+                  className="mt-3 flex items-center gap-1 text-xs font-medium text-violet-400 hover:text-violet-300 transition-colors"
+                >
+                  {consistencyExpanded
+                    ? "Show less"
+                    : `Show all ${consistencyData.length} enrollments`}
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${consistencyExpanded ? "rotate-180" : ""}`}
+                  />
+                </button>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

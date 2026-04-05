@@ -393,19 +393,7 @@ export default function Home() {
   const [auroraOpacity, setAuroraOpacity] = useState(0);
 
   useEffect(() => {
-    // Globe launch: 0.5s delay + 2.2s animation
-    // Start fading smoke in partway through the globe animation so they arrive together
-    const timer = setTimeout(() => {
-      let start: number | null = null;
-      const fadeDuration = 2200; // match globe animation duration
-      const animate = (ts: number) => {
-        if (!start) start = ts;
-        const progress = Math.min((ts - start) / fadeDuration, 1);
-        setAuroraOpacity(progress);
-        if (progress < 1) requestAnimationFrame(animate);
-      };
-      requestAnimationFrame(animate);
-    }, 500);
+    const timer = setTimeout(() => setAuroraOpacity(1), 500);
     return () => clearTimeout(timer);
   }, []);
 
