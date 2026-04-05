@@ -410,12 +410,12 @@ export default function SurveyPage() {
               for quality scoring. Compensation will be processed once the
               study is complete.
             </p>
-            <Link href="/">
+            <Link href="/study">
               <Button
                 variant="outline"
                 className="mt-2 border-white/10 text-white/70 hover:bg-white/10"
               >
-                Back to Home
+                Browse Studies
               </Button>
             </Link>
           </CardContent>
